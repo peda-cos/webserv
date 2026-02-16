@@ -7,6 +7,7 @@
 #include <vector>
 
 struct Connection;
+class Listener;
 
 struct PollAction {
   int fd;
@@ -26,12 +27,15 @@ class EventLoop {
   void unregister_fd(int fd);
   void modify_fd(int fd, short events);
 
+  void add_listener(Listener* listener);
+
   void run();
   void stop();
 
  private:
   std::vector<pollfd> _fds;
   std::map<int, Connection*> _conns;
+  std::map<int, Listener*> _listeners;
   std::vector<PollAction> _pending;
   bool _running;
 
