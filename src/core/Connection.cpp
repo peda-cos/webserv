@@ -6,7 +6,8 @@ Connection::Connection()
       rbuf(),
       wbuf(),
       last_activity(0),
-      wants_write(false) {}
+      wants_write(false),
+      parser(1048576) {}
 
 Connection::Connection(int fd)
     : fd(fd),
@@ -14,4 +15,5 @@ Connection::Connection(int fd)
       rbuf(),
       wbuf(),
       last_activity(0),
-      wants_write(false) {}
+      wants_write(false),
+      parser(1048576) {}

@@ -3,6 +3,7 @@
 
 #include <ctime>
 #include <string>
+#include "http/HttpParser.hpp"
 
 enum ConnState { CONN_READING, CONN_PROCESSING, CONN_WRITING, CONN_CLOSING };
 
@@ -13,6 +14,7 @@ struct Connection {
   std::string wbuf;
   std::time_t last_activity;
   bool wants_write;
+  HttpParser parser;
 
   Connection();
   explicit Connection(int fd);

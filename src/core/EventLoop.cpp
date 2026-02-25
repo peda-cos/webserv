@@ -7,8 +7,10 @@
 #include <unistd.h>
 
 #include <ctime>
+#include <sstream>
 
 #include "../../includes/core/Connection.hpp"
+#include "../../includes/http/HttpParser.hpp"
 #include "../../includes/core/Listener.hpp"
 
 PollAction::PollAction() : fd(-1), events(0), remove(false) {}
@@ -153,12 +155,30 @@ void EventLoop::handle_ready() {
         if (bytes > 0) {
           conn->rbuf.append(buffer, bytes);
           conn->last_activity = std::time(NULL);
-          conn->state = CONN_PROCESSING;
-          conn->wbuf =
-              "HTTP/1.1 400 Bad Request\r\nConnection: "
-              "close\r\nContent-Length: 0\r\n\r\n";
-          conn->wants_write = true;
-          modify_fd(it->fd, POLLIN | POLLOUT);
+
+          ParseResult result = conn->parser.feed(conn->rbuf);
+
+          if (result == PARSE_COMPLETE) {
+            conn->wbuf = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            conn->wants_write = true;
+            conn->state = CONN_PROCESSING;
+            modify_fd(it->fd, POLLIN | POLLOUT);
+          } else if (result == PARSE_ERROR) {
+            int code = conn->parser.error_code();
+            std::string msg;
+            if (code == 413) msg = "Content Too Large";
+            else if (code == 414) msg = "URI Too Long";
+            else if (code == 501) msg = "Not Implemented";
+            else { code = 400; msg = "Bad Request"; }
+            std::ostringstream oss;
+            oss << "HTTP/1.1 " << code << " " << msg
+                << "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+            conn->wbuf = oss.str();
+            conn->wants_write = true;
+            conn->state = CONN_PROCESSING;
+            modify_fd(it->fd, POLLIN | POLLOUT);
+          }
+          // PARSE_INCOMPLETE: do nothing, wait for more data
         } else {
           to_remove.push_back(it->fd);
         }
