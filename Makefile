@@ -1,32 +1,30 @@
-# Makefile for webserv - C++98 webserver
 NAME = webserv
+CC = c++
+CFLAGS = -Wall -Wextra -Werror -std=c++98 -I./includes
+SRCS = src/main.cpp \
+       src/core/Connection.cpp \
+       src/core/EventLoop.cpp \
+       src/core/Listener.cpp \
+       src/http/HttpParser.cpp
+OBJS = $(SRCS:.cpp=.o)
 
-CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -I./includes
-
-# Source and object files
-SRCS = $(wildcard src/core/*.cpp) $(wildcard src/http/*.cpp) src/main.cpp
-OBJS = $(patsubst src/%.cpp,obj/%.o,$(SRCS))
-
-# Directories for objects
-OBJ_DIRS = obj obj/core obj/http
-
-all: $(OBJ_DIRS) $(NAME)
+all: $(NAME)
 
 $(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $(NAME) $(OBJS)
+	@$(CC) $(CFLAGS) -o $(NAME) $(OBJS)
+	@echo "$(NAME)"
 
-obj/%.o: src/%.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(OBJ_DIRS):
-	mkdir -p $@
+%.o: %.cpp
+	@$(CC) $(CFLAGS) -c $< -o $@
+	@echo "Compiling $<"
 
 clean:
-	rm -rf obj/
+	@rm -f $(OBJS)
+	@echo "Objects removed."
 
 fclean: clean
-	rm -f $(NAME)
+	@rm -f $(NAME)
+	@echo "Executable removed."
 
 re: fclean all
 
