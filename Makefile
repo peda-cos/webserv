@@ -5,21 +5,19 @@ SRCS = src/main.cpp \
        src/core/Connection.cpp \
        src/core/EventLoop.cpp \
        src/core/Listener.cpp \
-       src/http/HttpParser.cpp
-
-CONFIG_SRCS = src/config/Token.cpp \
-              src/config/Lexer.cpp \
-              src/config/ConfigNode.cpp \
-              src/config/Parser.cpp \
-              src/config/SemanticValidator.cpp \
-              src/config/ConfigLoader.cpp \
-              src/types/ServerConfig.cpp
+       src/http/HttpParser.cpp \
+       src/config/Token.cpp \
+       src/config/Lexer.cpp \
+       src/config/ConfigNode.cpp \
+       src/config/Parser.cpp \
+       src/config/SemanticValidator.cpp \
+       src/config/ConfigLoader.cpp \
+       src/types/ServerConfig.cpp
 OBJS = $(SRCS:.cpp=.o)
-CONFIG_OBJS = $(CONFIG_SRCS:.cpp=.o)
 
 all: $(NAME)
 
-$(NAME): $(OBJS) $(CONFIG_OBJS)
+$(NAME): $(OBJS)
 	@$(CC) $(CFLAGS) -o $(NAME) $(OBJS)
 	@echo "$(NAME)"
 
@@ -27,16 +25,8 @@ $(NAME): $(OBJS) $(CONFIG_OBJS)
 	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "Compiling $<"
 
-src/config/%.o: src/config/%.cpp
-	@$(CC) $(CFLAGS) -c $< -o $@
-	@echo "Compiling $<"
-
-src/types/%.o: src/types/%.cpp
-	@$(CC) $(CFLAGS) -c $< -o $@
-	@echo "Compiling $<"
-
 clean:
-	@rm -f $(OBJS) $(CONFIG_OBJS)
+	@rm -f $(OBJS)
 	@echo "Objects removed."
 
 fclean: clean
