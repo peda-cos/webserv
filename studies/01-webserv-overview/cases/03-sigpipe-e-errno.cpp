@@ -22,7 +22,7 @@
 
 // ── Criação e setup do servidor ──────────────────────────────────────────────
 // Encapsula socket + setsockopt + bind + listen num helper para clareza.
-static int criar_servidor(int porta)
+static int create_server(int porta)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) { perror("socket"); return -1; }
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
         std::cout << "[MODO] SEM proteção: SIGPIPE vai matar o servidor!" << std::endl;
     }
 
-    int server_fd = criar_servidor(8080);
+    int server_fd = create_server(8080);
     if (server_fd < 0) return EXIT_FAILURE;
 
     std::cout << "Servidor na porta 8080. Conecte e feche abruptamente (Ctrl+C no nc)." << std::endl;
