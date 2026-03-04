@@ -59,6 +59,3 @@ send(client_fd, buffer, len, MSG_NOSIGNAL);
 - `errno` é **compartilhado** entre todas as chamadas de sistema — outra função pode sobrescrever antes de você checar.
 - `EINTR` (interrompido por sinal) não é erro fatal: basta chamar `recv()` novamente.
 - `EAGAIN` / `EWOULDBLOCK` não são erros em sockets não-bloqueantes: são sinais de "nada disponível agora".
-
-## Próximo Passo de Aprendizado
-- Estudar: `poll()` — como monitorar múltiplos fds sem bloquear e sem verificar errno

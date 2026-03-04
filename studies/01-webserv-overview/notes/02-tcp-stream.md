@@ -37,7 +37,3 @@ O servidor **precisa juntar** os três pedaços antes de interpretar a requisiç
 - Assumir que um `send()` de 200 bytes gera exatamente um `recv()` de 200 bytes no outro lado — **isso está errado**.
 - Zerar o buffer entre chamadas de `recv()` sem copiar o que já havia acumulado — **perde dados parciais**.
 - Interpretar `recv()` retornando menos bytes que o tamanho do buffer como erro — **é comportamento normal**.
-
-## Próximo Passo de Aprendizado
-- Implementar: `02-tcp-stream.cpp` — cliente que envia em pedaços pequenos + servidor que acumula no buffer até `\r\n\r\n`
-- Estudar: como o HTTP usa `Content-Length` e `Transfer-Encoding: chunked` para sinalizar o fim do body
