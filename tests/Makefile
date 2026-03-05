@@ -12,6 +12,7 @@ BONUS_DIR     = bonus
 
 # Unit test sources — listed explicitly (no globs)
 UNIT_SRCS = \
+	$(UNIT_DIR)/test_config_lexer.cpp \
 	$(UNIT_DIR)/test_config_parser.cpp \
 	$(UNIT_DIR)/test_http_request_parser.cpp \
 	$(UNIT_DIR)/test_http_response_builder.cpp \
@@ -39,6 +40,9 @@ unit: $(UNIT_BINS)
 	done; \
 	if [ $$failed -ne 0 ]; then echo "UNIT TESTS FAILED"; exit 1; fi
 	@echo "=== Unit Tests Complete ==="
+
+$(UNIT_DIR)/test_config_lexer: $(UNIT_DIR)/test_config_lexer.cpp $(FRAMEWORK_DIR)/minitest.hpp
+	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $< ../srcs/config/ConfigLexer.cpp
 
 $(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<

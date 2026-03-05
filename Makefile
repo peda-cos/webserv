@@ -1,8 +1,8 @@
 NAME = webserv
 CXX = c++
-CXXFLAGS = -std=c++98 -Wall -Wextra -Werror -MMD -MP
+CXXFLAGS = -std=c++98 -Wall -Wextra -Werror -MMD -MP -I includes
 
-SRCS = srcs/main.cpp
+SRCS = srcs/main.cpp srcs/config/ConfigLexer.cpp
 
 OBJS = $(SRCS:srcs/%.cpp=obj/%.o)
 DEPS = $(OBJS:.o=.d)
