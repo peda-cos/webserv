@@ -1,9 +1,9 @@
 # Anatomia de uma Requisição HTTP — Notas de Estudo
 
 ## O que é uma Requisição HTTP
-- Um bloco de texto puro (ASCII) enviado pelo cliente (browser/nc) ao servidor.
-- Chega pelo socket como bytes brutos — o servidor que interpreta o significado.
-- Estrutura **obrigatoriamente** dividida em 3 partes separadas por marcadores exatos.
+- É o bloco de texto puro (ASCII) que o cliente (browser/nc) envia pelo socket.
+- Essa mensagem chega ao servidor como bytes brutos — cabe ao código interpretar o significado.
+- A estrutura **obrigatoriamente** se divide em 3 partes separadas por marcadores exatos.
 
 ---
 
@@ -17,7 +17,7 @@ Connection: keep-alive\r\n            ← Header 3
 \r\n                                  ← Linha vazia = fim dos headers (boundary!)
 ```
 
-Para requisição com body (POST, PUT):
+Para requisições com body (ex: POST):
 ```
 POST /upload HTTP/1.1\r\n
 Host: localhost:8080\r\n
@@ -36,84 +36,77 @@ Sempre a primeira linha. Formato obrigatório:
 MÉTODO SP caminho SP versão\r\n
 ```
 
-| Campo | Exemplo | O que significa |
+| Campo | Exemplo | O que deve ser extraído |
 |---|---|---|
-| Método | `GET`, `POST`, `DELETE` | Ação a executar |
-| Caminho | `/index.html`, `/api/user` | Recurso solicitado |
-| Versão | `HTTP/1.1` | Protocolo usado |
+| **Método** | `GET`, `POST`, `DELETE` | Ação a executar |
+| **Caminho** | `/index.html`, `/api` | Qual arquivo/rota o cliente quer |
+| **Versão** | `HTTP/1.1` | Protocolo usado (o Webserv só exige 1.1) |
 
 ### Métodos que o Webserv deve implementar
-| Método | Uso | Body? |
+| Método | Uso | Recebe Body? |
 |---|---|---|
 | `GET` | Buscar um recurso | ❌ Não |
-| `POST` | Enviar dados / criar recurso | ✅ Sim |
-| `DELETE` | Deletar um recurso | ❌ Geralmente não |
+| `POST` | Enviar dados / fazer upload | ✅ Sim |
+| `DELETE` | Apagar um recurso no servidor | ❌ Geralmente não |
 
 ---
 
 ## Parte 2 — Headers
 
 - Um header por linha, formato: `Nome: Valor\r\n`
-- O nome é case-insensitive (`Content-Length` = `content-length`)
-- Headers terminam com uma linha vazia (`\r\n` sozinho)
+- Nomes são case-insensitive (`Content-Length` é igual a `content-length`)
+- A sessão de headers termina com uma linha vazia (`\r\n` sozinho)
 
-### Headers críticos para o Webserv
+### Headers críticos que o servidor deve tratar
 
-| Header | Exemplo | Importância |
-|---|---|---|
-| `Host` | `Host: localhost:8080` | **Obrigatório** em HTTP/1.1 — identifica o virtual host |
-| `Content-Length` | `Content-Length: 42` | Tamanho do body em bytes — necessário para saber quando o body termina |
-| `Content-Type` | `Content-Type: text/html` | Tipo do dado enviado no body |
-| `Connection` | `Connection: close` | Fechar conexão após resposta? |
-| `Transfer-Encoding` | `Transfer-Encoding: chunked` | Body enviado em chunks sem Content-Length |
-
----
-
-## Parte 3 — Body (opcional)
-
-- Presente em `POST`, `PUT` e `PATCH`
-- Ausente em `GET` e `DELETE`
-- Tamanho definido pelo header `Content-Length`
-- Lê exatamente `Content-Length` bytes após o `\r\n\r\n`
+| Header | Importância no Webserv |
+|---|---|
+| `Host` | **Obrigatório** no HTTP/1.1. Usado para saber qual bloco `server {}` do `.conf` deve responder. Se faltar, retornar `400 Bad Request`. |
+| `Content-Length` | Tamanho do body em bytes. Sem isso, nunca se sabe quando o body de um POST termina. |
+| `Content-Type` | Indica o tipo de dado do body (texto, JSON, multipart-form). |
+| `Connection` | Se for `close`, o `fd` deve ser fechado após o envio da resposta. |
+| `Transfer-Encoding` | Se for `chunked`, o body chega em blocos fracionados (requer um parser especial para ler o tamanho hexadecimal de cada bloco). |
 
 ---
 
-## O Marcador de Fim — `\r\n\r\n`
+## Parte 3 — Body (Opcional)
 
-- `\r` = carriage return (ASCII 13)
-- `\n` = line feed (ASCII 10)
-- Cada header termina com `\r\n`
-- A linha vazia entre headers e body é `\r\n` sozinho
-- A sequência `\r\n\r\n` = fim do último header + linha vazia = **fim dos headers**
-- Só após encontrar `\r\n\r\n` no buffer acumulado é que os headers podem ser parseados
+- O body só é lido em métodos `POST` e `PUT` (ou `PATCH`).
+- O tamanho exato do body a ser lido está no header `Content-Length`.
+- Devem ser lidos **exatamente** `Content-Length` bytes a partir do caractere após o `\r\n\r\n`.
 
 ---
 
-## Fluxo de Parsing que o Webserv Precisa Seguir
+## O Marcador de Fim Crítico — `\r\n\r\n`
 
+- O HTTP nasceu na época das máquinas de escrever: `\r` (carriage return = volta pro início da linha) e `\n` (line feed = pula pra linha de baixo).
+- Cada header termina com `\r\n`.
+- A separação entre headers e body é uma linha vazia (só um `\r\n`).
+- Juntando o `\r\n` do último header com a linha vazia: **`\r\n\r\n`**.
+- **Regra de ouro do parser:** Só é seguro começar a ler o conteúdo extraído quando o boundary `\r\n\r\n` for encontrado no `recv_buffer`.
+
+---
+
+## Fluxo Lógico de Parsing no Código
+
+```text
+1. Acumular os bytes que o recv() entrega no std::string recv_buffer.
+2. Contém \r\n\r\n no buffer?
+   - NÃO: Manter a string guardada e deixar o poll() voltar com mais bytes depois.
+   - SIM: Prosseguir com o fatiamento da requisição.
+3. Separar a Request Line (até o 1º \r\n).
+4. Isolar os tokens por espaços: método, caminho, versão.
+5. Fazer um loop iterando linha a linha e preencher um std::map<string, string> de headers.
+6. Se o método é POST: verificar o Content-Length e confirmar se o tamanho do "resto do buffer" é igual ou maior que essa variável.
+7. Requisição validada -> Marcar a requisição como "Completada" e direcionar para o gerador de Respostas.
 ```
-1. Acumular bytes no recv_buffer até encontrar \r\n\r\n
-2. Separar a Request Line — tudo antes do primeiro \r\n
-3. Extrair o método (primeiro token)
-4. Extrair o caminho (segundo token)
-5. Extrair a versão (terceiro token)
-6. Parsear cada header — linha por linha até a linha vazia
-7. Se método for POST: verificar Content-Length e ler exatamente N bytes de body
-8. Montar a resposta e colocar no send_buffer
-```
 
 ---
 
-## Regras / Restrições Críticas
+## Armadilhas Comuns no Subject 
 
-- **NUNCA parsear requisição incompleta** — aguardar `\r\n\r\n` antes de interpretar.
-- **SEMPRE validar** o método — retornar `405 Method Not Allowed` se não suportado.
-- **Content-Length ausente em POST** → retornar `400 Bad Request`.
-- **Caminho deve começar com `/`** — caminhos relativos são inválidos.
-- **Headers são case-insensitive** — normalizar para lowercase ao comparar.
-
-## Armadilhas Comuns (Não Esquecer)
-- `\r\n` é diferente de `\n` — browsers enviam `\r\n`, mas clientes mal-formados podem enviar só `\n`.
-- Um header com valor muito longo pode ser vetor de ataque (buffer overflow) — limitar o tamanho.
-- O caminho pode conter query string: `/busca?q=hello` — separar o path do `?` em diante.
-- Pipelining HTTP/1.1: dois requests podem "colar" no mesmo buffer após o `\r\n\r\n`.
+- **Nunca fazer o parse de uma requisição pela metade!** Aguardar sempre o `\r\n\r\n`.
+- **Validar o método preventivamente:** Se enviarem `PUT` e a rota alvo no `.conf` só suportar `GET`, retornar imediatamente um `405 Method Not Allowed`.
+- **Sem Caminhos Relativos:** O target na request line tem obrigatoriamente que começar com `/`.
+- **Tratamento de Headers Gigantes:** Clientes mal-intencionados mandam headers infinitos para estourar o buffer. Impor um limite de corte (Ex: limite máximo fixado em 8KB).
+- **Pipelining HTTP/1.1:** O cliente pode mandar 2 requisições `GET` inteiras agrupadas dentro do mesmo pacote TCP. Quando fatiar pelo `\r\n\r\n`, entender que o "resto" do buffer que sobrou lá dentro não é lixo; pode ser o início exato da próxima requisição que já está entrando.

@@ -8,7 +8,7 @@
 ## Como Funciona (Mecanismo)
 - TCP opera num **fluxo contínuo de bytes** (stream), sem fronteiras de mensagem.
 - O SO decide quando encapsular os bytes em pacotes (segmentos TCP) baseado em MTU, latência e algoritmo de Nagle.
-- O `recv()` lê o que **já chegou no buffer do SO** naquele instante — pode ser parte, tudo ou mais do que você esperava.
+- O `recv()` lê o que **já chegou no buffer do SO** naquele instante — pode ser parte, tudo ou mais do que o esperado.
 
 ## Implicação Direta para o Webserv
 - Nunca assumir `1 recv() = 1 requisição HTTP completa`.

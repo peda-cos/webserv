@@ -12,7 +12,7 @@
 
 ## 3. Multiplexação de I/O (O Coração do Servidor)
 - **Servirá para:** Atender paralelamente a todos os clientes, sem parar, usando apenas **uma única thread**.
-- **Como atuará:** Rodará um loop infinito usando a função `poll()` (ou `epoll`, `kqueue`). O `poll()` vigiará todas as conexões simultaneamente e avisará o algoritmo apenas quando uma conexão específica tiver dados prontos para nós ou estiver livre para recebermos dados.
+- **Como atuará:** Rodará um loop infinito usando a função `poll()` (ou `epoll`, `kqueue`). O `poll()` vigiará todas as conexões simultaneamente e avisará o algoritmo apenas quando uma conexão específica tiver dados prontos para leitura ou estiver livre para o envio de dados.
 
 ## 4. Processamento do Protocolo HTTP
 - **Servirá para:** Interpretar o desejo do cliente, executar a ação e enviar a resposta.

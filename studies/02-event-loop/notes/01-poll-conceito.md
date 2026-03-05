@@ -69,6 +69,6 @@ loop eterno:
 
 ## Armadilhas Comuns (Não Esquecer)
 - Remover do array `fds[]` os clientes que desconectam — fd fechado mas ainda no array causa POLLNVAL.
-- Não confundir `events` (o que você pediu) com `revents` (o que o SO reportou) — são campos diferentes.
+- Não confundir `events` (o que foi solicitado) com `revents` (o que o SO reportou) — são campos diferentes.
 - `POLLOUT` ativo o tempo todo desperdiça CPU — ativar apenas quando há dados no buffer de saída aguardando envio.
 - O array `fds[]` precisa ser redimensionado quando novos clientes entram.

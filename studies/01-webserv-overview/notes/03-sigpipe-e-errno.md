@@ -56,6 +56,6 @@ send(client_fd, buffer, len, MSG_NOSIGNAL);
 ```
 
 ### Armadilhas Comuns (Não Esquecer)
-- `errno` é **compartilhado** entre todas as chamadas de sistema — outra função pode sobrescrever antes de você checar.
+- `errno` é **compartilhado** entre todas as chamadas de sistema — outra função pode sobrescrever antes da checagem.
 - `EINTR` (interrompido por sinal) não é erro fatal: basta chamar `recv()` novamente.
 - `EAGAIN` / `EWOULDBLOCK` não são erros em sockets não-bloqueantes: são sinais de "nada disponível agora".
