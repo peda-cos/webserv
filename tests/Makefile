@@ -44,8 +44,8 @@ unit: $(UNIT_BINS)
 $(UNIT_DIR)/test_config_lexer: $(UNIT_DIR)/test_config_lexer.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $< ../srcs/config/ConfigLexer.cpp
 
-$(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
+$(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp ../srcs/config/ConfigLexer.cpp ../srcs/config/ConfigParser.cpp
+	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $< ../srcs/config/ConfigLexer.cpp ../srcs/config/ConfigParser.cpp
 
 $(UNIT_DIR)/test_http_request_parser: $(UNIT_DIR)/test_http_request_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<

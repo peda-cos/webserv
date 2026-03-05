@@ -14,51 +14,12 @@
 #include <stdexcept>
 #include <cstddef>
 
-/* ===== STUBS — replace with real includes once implemented =============== */
-/* These stubs define the expected API surface for the config parser.         */
-/* They will fail tests deterministically until real implementation exists.   */
+/* ===== REAL INCLUDES ==================================================== */
+#include "ConfigParser.hpp"
+#include "ServerConfig.hpp"
+#include "LocationConfig.hpp"
 
-struct LocationConfig {
-	std::string                        path;
-	std::string                        root;
-	std::string                        index;
-	bool                               autoindex;
-	std::vector<std::string>           limitExcept;
-	std::string                        uploadStore;
-	std::map<std::string, std::string> cgiPass;
-
-	LocationConfig() : autoindex(false) {}
-};
-
-struct ServerConfig {
-	std::string                     host;
-	int                             port;
-	std::size_t                     clientMaxBodySize;
-	std::map<int, std::string>      errorPages;
-	std::vector<LocationConfig>     locations;
-
-	ServerConfig() : port(0), clientMaxBodySize(0) {}
-};
-
-class ConfigParseException : public std::runtime_error {
-public:
-	explicit ConfigParseException(const std::string& msg)
-		: std::runtime_error(msg) {}
-};
-
-class ConfigParser {
-public:
-	static std::vector<ServerConfig> parse(const std::string& content) {
-		(void)content;
-		/* Stub: always returns empty vector so every test fails. */
-		return std::vector<ServerConfig>();
-	}
-
-private:
-	ConfigParser();
-};
-
-/* ===== END STUBS ======================================================== */
+/* ===== END INCLUDES ===================================================== */
 
 /* ------------------------------------------------------------------------ */
 /* 1. A valid single server block should produce exactly one ServerConfig.   */
