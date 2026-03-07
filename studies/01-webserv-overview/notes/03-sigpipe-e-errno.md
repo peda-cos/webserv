@@ -5,7 +5,7 @@
 ### O que é / Para que serve
 - `SIGPIPE` é um sinal enviado pelo SO ao processo quando ele tenta fazer `send()` ou `write()` num socket cujo lado receptor já fechou a conexão.
 - Por padrão, `SIGPIPE` **mata o processo imediatamente** sem nenhuma mensagem de erro.
-- Viola diretamente a regra do subject: *"seu programa não deve travar sob nenhuma circunstância"*.
+- Viola diretamente a regra do Projeto: *"seu programa não deve travar sob nenhuma circunstância"*.
 
 ### Como Funciona (Mecanismo)
 1. Cliente A conecta ao servidor.
@@ -31,20 +31,20 @@ send(client_fd, buffer, len, MSG_NOSIGNAL);
 
 ---
 
-## errno — A Variável que o Subject Proíbe Verificar
+## errno — A Variável que o Projeto Proíbe Verificar
 
 ### O que é / Para que serve
 - `errno` é uma variável global do sistema (definida em `<cerrno>`) que armazena o código do **último erro de chamada de sistema**.
 - Funções como `read()`, `write()`, `recv()`, `send()` atualizam `errno` quando retornam `-1`.
 
-### Por que o Subject Proíbe Verificar errno Após read/write
+### Por que o Projeto Proíbe Verificar errno Após read/write
 - Em modo **não-bloqueante** (que o Webserv usa com `poll()`), `recv()` pode retornar `-1` com `errno == EAGAIN` ou `errno == EWOULDBLOCK` — isso **não é um erro**: significa "não há dados agora, tente depois".
 - Verificar `errno` leva a comportamentos errados: tratar `EAGAIN` como falha fatal fecha conexões válidas.
 - A forma correta é **usar o valor de retorno** da função para decidir o que fazer.
 
 ### Comportamento Correto vs. Errado
 ```
-❌ ERRADO (proibido pelo subject):
+❌ ERRADO (proibido pelo Projeto):
    bytes = recv(fd, buf, len, 0);
    if (errno == EAGAIN) { /* trata como erro */ }
 

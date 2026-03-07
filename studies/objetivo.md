@@ -27,7 +27,7 @@ Quando um novo usuário se conectava, o servidor "contratava um garçom exclusiv
 **O servidor moderno (nginx / este projeto):**
 Em vez de milhares de garçons, usa **UM único garçom superpoderoso**. Esse garçom não fica parado do lado da mesa esperando o cliente decidir se quer batata-frita *(isso seria uma operação bloqueante)*. Ele fica no centro do salão observando todas as mesas simultaneamente e só vai até uma mesa quando o cliente já levantou a mão. Isso é o **I/O Não-Bloqueante com multiplexação**.
 
-**O subject exige a construção exata desse servidor moderno** — em C++98, uma única thread, usando `poll()` (ou equivalentes: `epoll_wait`, `select`, `kqueue`) para atender múltiplos clientes de forma 100% não-bloqueante.
+**O Projeto exige a construção exata desse servidor moderno** — em C++98, uma única thread, usando `poll()` (ou equivalentes: `epoll_wait`, `select`, `kqueue`) para atender múltiplos clientes de forma 100% não-bloqueante.
 
 ---
 
@@ -52,10 +52,10 @@ Se pedem um HTML ou imagem, basta pegar na prateleira. Se o browser pede a execu
 
 ---
 
-## As Grandes Pegadinhas — Regras do Subject
+## As Grandes Pegadinhas — Regras do Projeto
 
 ### Bloqueio Fatal — Nota = 0
-A regra mais cruel do subject: usar funções de leitura/escrita em um momento em que elas pararem a execução aguardando dados ainda não disponíveis. Se o único garçom parar em uma mesa, todas as outras congelam.
+A regra mais cruel do Projeto: usar funções de leitura/escrita em um momento em que elas pararem a execução aguardando dados ainda não disponíveis. Se o único garçom parar em uma mesa, todas as outras congelam.
 
 ### Ser Indestrutível — Nunca Travar
 Clientes são imprevisíveis: enviam lixo, desconectam o Wi-Fi no meio do download, pedem caminhos estranhos. O servidor nunca encerra o processo por erro do cliente — apenas responder com graciosidade: `400 Bad Request` ou `500 Internal Server Error`.

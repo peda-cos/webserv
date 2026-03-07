@@ -1,4 +1,4 @@
-// 03-http-response.cpp — Servidor estático básico (MIME Types, 404 e Leitura do Disco)
+// http-response.cpp — Servidor estático básico (MIME Types, 404 e Leitura do Disco)
 // Compilar: c++ -std=c++98 -Wall -Wextra -Werror -o http_response 03-http-response.cpp
 //
 // TESTAR NO NAVEGADOR:
@@ -147,7 +147,11 @@ int main() {
 
     // Facilita os testes: copia a pasta de estudos dinamicamente para onde o server rodar
     std::cout << "[SETUP] Copiando pasta www para /tmp para facilitar seus testes..." << std::endl;
-    system("cp -r /home/jonnathan/42-school/webserv/studies/03-http-parsing/www /tmp 2>/dev/null");
+    std::string src_path = __FILE__;
+    size_t pos = src_path.find_last_of('/');
+    std::string dir = (pos == std::string::npos) ? "." : src_path.substr(0, pos);
+    std::string cmd = "cp -r " + dir + "/www /tmp 2>/dev/null";
+    system(cmd.c_str());
     
     // Altera o diretório de trabalho do processo silenciosamente para rodar lá
     if (chdir("/tmp") != 0) {

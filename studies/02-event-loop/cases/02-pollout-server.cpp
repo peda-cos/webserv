@@ -10,9 +10,6 @@
 //   O servidor lê um arquivo grande (passado como argv[1]) inteiro para memória,
 //   depois tenta enviar de uma só vez. send() retorna menos do que pedido.
 //   O restante vai para o send_buffer do cliente e é enviado via POLLOUT.
-//
-// EXEMPLO:
-//   /tmp/pollout /home/jonnathan/42-school/webserv/refs/SUBJECT.txt
 
 #include <iostream>
 #include <string>

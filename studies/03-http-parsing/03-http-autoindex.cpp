@@ -1,4 +1,4 @@
-// 04-http-autoindex.cpp — Servidor que lida com Arquivos e Diretórios (Autoindex)
+// http-autoindex.cpp — Servidor que lida com Arquivos e Diretórios (Autoindex)
 // Compilar: c++ -std=c++98 -Wall -Wextra -Werror -o http_autoindex 04-http-autoindex.cpp
 //
 // TESTAR NO NAVEGADOR:
@@ -183,7 +183,11 @@ int main() {
 
     // Facilita os testes: copia a pasta de estudos para o tmp dinamicamente
     std::cout << "[SETUP] Copiando pasta www para /tmp para facilitar seus testes..." << std::endl;
-    system("cp -r /home/jonnathan/42-school/webserv/studies/03-http-parsing/www /tmp 2>/dev/null");
+    std::string src_path = __FILE__;
+    size_t pos = src_path.find_last_of('/');
+    std::string dir = (pos == std::string::npos) ? "." : src_path.substr(0, pos);
+    std::string cmd = "cp -r " + dir + "/www /tmp 2>/dev/null";
+    system(cmd.c_str());
     
     // Altera o diretório de trabalho do processo silenciosamente para o path de cópia
     if (chdir("/tmp") != 0) {

@@ -103,7 +103,7 @@ MÉTODO SP caminho SP versão\r\n
 
 ---
 
-## Armadilhas Comuns no Subject 
+## Armadilhas Comuns no Projeto 
 
 - **Nunca fazer o parse de uma requisição pela metade!** Aguardar sempre o `\r\n\r\n`.
 - **Validar o método preventivamente:** Se enviarem `PUT` e a rota alvo no `.conf` só suportar `GET`, retornar imediatamente um `405 Method Not Allowed`.
