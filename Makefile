@@ -1,23 +1,27 @@
 NAME = webserv
-CXX = c++
-CXXFLAGS = -std=c++98 -Wall -Wextra -Werror -MMD -MP
+COMPILER = c++
+VERSION = -std=c++98
+INCLUDES = -I includes
+DEPS_HEADERS = -MMD -MP
+SYNTAX = -Wall -Wextra -Werror
+FLAGS = $(VERSION) $(SYNTAX) $(DEPS_HEADERS) $(INCLUDES)
 
 SRCS = srcs/main.cpp
 
-OBJS = $(SRCS:srcs/%.cpp=obj/%.o)
+OBJS = $(SRCS:srcs/%.cpp=objs/%.o)
 DEPS = $(OBJS:.o=.d)
 
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+	$(COMPILER) $(FLAGS) $(OBJS) -o $(NAME)
 
-obj/%.o: srcs/%.cpp
+objs/%.o: srcs/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(COMPILER) $(FLAGS) -c $< -o $@
 
 clean:
-	@rm -rf obj/
+	@rm -rf objs/
 
 fclean: clean
 	@rm -f $(NAME)
