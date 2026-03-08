@@ -1,12 +1,17 @@
 NAME = webserv
 COMPILER = c++
 VERSION = -std=c++98
-INCLUDES = -I includes
 DEPS_HEADERS = -MMD -MP
 SYNTAX = -Wall -Wextra -Werror
+# TODO: Validar se pode? - E a mesma coisa que willcard para sources ?
+INCLUDES = $(addprefix -I , $(shell find includes -type d)) 
+# ---------------------------------------------------------
 FLAGS = $(VERSION) $(SYNTAX) $(DEPS_HEADERS) $(INCLUDES)
 
-SRCS = srcs/main.cpp
+LEXER_SRCS = srcs/config/ConfigLexer.cpp
+UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp
+
+SRCS = srcs/main.cpp $(LEXER_SRCS) $(UTILS_SRCS)
 
 OBJS = $(SRCS:srcs/%.cpp=objs/%.o)
 DEPS = $(OBJS:.o=.d)
