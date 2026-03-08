@@ -9,9 +9,10 @@ INCLUDES = $(addprefix -I , $(shell find includes -type d))
 FLAGS = $(VERSION) $(SYNTAX) $(DEPS_HEADERS) $(INCLUDES)
 
 LEXER_SRCS = srcs/config/ConfigLexer.cpp
-UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp
+PARSER_SRCS = srcs/config/ConfigParser.cpp
+UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp srcs/utils/Logger.cpp
 
-SRCS = srcs/main.cpp $(LEXER_SRCS) $(UTILS_SRCS)
+SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS)
 
 OBJS = $(SRCS:srcs/%.cpp=objs/%.o)
 DEPS = $(OBJS:.o=.d)

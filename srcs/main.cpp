@@ -2,34 +2,37 @@
 #include "ConfigLexer.hpp"
 #include "ParsingUtils.hpp"
 #include "ConfigUtils.hpp"
+#include "ConfigParser.hpp"
+#include "Logger.hpp"
 #include <iostream>
 
-void testConfigLexer() {
-    std::string configSource = "server {\n"
-                               "    listen 80;\n"
-                               "    server_name example.com;\n"
-                               "    locatio@n / {\n"
-                               "        root /var/www/html;\n"
-                               "        index index.html;\n"
-                               "    }\n"
-                               "}\n";
-    
-    ConfigLexer lexer(configSource);
+void testConfigParser() {
+    std::string config_source = "server {\n"
+                                "    listen 80;\n"
+                                "    client_max_body_size 1048576;\n"
+                                "    error_page 404 /404.html;\n"
+                                "}\n";
+    ConfigLexer lexer(config_source);
     std::vector<ConfigToken> tokens = lexer.tokenize();
+    ConfigParser parser(tokens);
+    Config config = parser.parse();
 
-    std::cout << "Tokens:\n";
-    
+    std::cout << "Parsed " << config.servers.size() << " server(s) from configuration." << std::endl;
+    std::cout << "Conf RAW: ";
     for (size_t i = 0; i < tokens.size(); ++i) {
-        const ConfigToken& token = tokens[i];
-        std::cout << "Token: " << token.value 
-                  << ", Type: " << token.type 
-                  << ", Line: " << token.sourcePosition.line 
-                  << ", Column: " << token.sourcePosition.column 
-                  << std::endl;
+        std::cout << tokens[i].value << " ";
     }
+    std::cout << std::endl;
 }
 
 int main() {
-    testConfigLexer();
+    try
+    {
+        testConfigParser();
+    }
+    catch(const std::exception& e)
+    {
+        Logger::error(e.what());
+    }
     return 0;
 }

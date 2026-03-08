@@ -1,77 +1,83 @@
 #include "ConfigLexer.hpp"
 #include "ParsingUtils.hpp"
 #include "ConfigUtils.hpp"
+#include <sstream>
 
-void ConfigLexer::skipComment() {
-    if (position < sourceLength && source[position] == '#') {
-        while (position < sourceLength && source[position] != '\n') {
+ConfigLexer::ConfigLexer(const std::string& source) : 
+    source(source), position(0), source_length(source.length()), source_position() {}
+
+const char* ConfigLexer::SourceInvalidSyntaxException::what() const throw() {
+    static std::string message;
+    std::stringstream ss;
+    ss << "'ConfigLexer': Invalid syntax in configuration file at "
+        << "line " << source_position.line  << ", column " << source_position.column;
+    message = ss.str();
+    return message.c_str();
+}
+
+void ConfigLexer::skip_comment() {
+    if (position < source_length && source[position] == '#') {
+        while (position < source_length && source[position] != '\n') {
             advance();
         }
     }
 }
 
 void ConfigLexer::advance() {
-    if (position < sourceLength) {
+    if (position < source_length) {
         if (source[position] == '\n') {
-            sourcePosition.line++;
-            sourcePosition.column = 1;
+            source_position.line++;
+            source_position.column = 1;
         } else {
-            sourcePosition.column++;
+            source_position.column++;
         }
         position++;
     }
 }
 
-#include <iostream>
-
-ConfigToken ConfigLexer::buildToken() {
+ConfigToken ConfigLexer::build_token() {
     std::string value;
-    while (position < sourceLength
-        && !ParsingUtils::isWhitespace(source[position]) 
-        && !ParsingUtils::isConfigDelimiter(source[position])) {
-        if (!ConfigUtils::isValidCharForConfigWord(source[position])) {
-            // TODO: precisa melhorar, criar um fluxo de error para ser processado pelo parser
+    while (position < source_length
+        && !ConfigUtils::is_delimiter(source[position])
+        && !ParsingUtils::is_whitespace(source[position])) {
+        if (!ConfigUtils::is_valid_char_for_config_word(source[position])) {
             std::string invalid(1, source[position]);
-            advance();
-            return ConfigToken(invalid, UNKNOWN, sourcePosition);
+            throw SourceInvalidSyntaxException(source_position);
         }
         value += source[position];
         advance();
     }
-    return ConfigToken(value, WORD, sourcePosition);
+    return ConfigToken(value, WORD, source_position);
 }
 
-ConfigLexer::ConfigLexer(const std::string& source) : 
-    source(source), position(0), sourceLength(source.length()), sourcePosition() {}
-
-ConfigToken ConfigLexer::getNextToken() {
-    while (position < sourceLength && ParsingUtils::isWhitespace(source[position])) {
+ConfigToken ConfigLexer::get_next_token() {
+    while (position < source_length && ParsingUtils::is_whitespace(source[position])) {
         advance();
     }
-    if (position >= sourceLength) {
-        return ConfigToken("", EOF_TOKEN, sourcePosition);
+    if (position >= source_length) {
+        return ConfigToken("", EOF_TOKEN, source_position);
     }
     if (source[position] == '#') {
-        skipComment();
-        return getNextToken();
+        skip_comment();
+        return get_next_token();
     }
     char current_char = source[position];
     
-    if (ParsingUtils::isConfigDelimiter(current_char)) {
+    if (ConfigUtils::is_delimiter(current_char)) {
         std::string value(1, current_char);
         ConfigTokenType type(ConfigUtils::getConfigDelimiterType(current_char));
-        ConfigToken token(value, type, sourcePosition);
+        ConfigToken token(value, type, source_position);
         advance();
         return token;
     }
 
-    return buildToken();
+    return build_token();
 }
 
 std::vector<ConfigToken> ConfigLexer::tokenize() {
     std::vector<ConfigToken> tokens;
-    while (position < sourceLength) {
-        ConfigToken token = getNextToken();
+    while (position < source_length) {
+        ConfigToken token = get_next_token();
         tokens.push_back(token);
     }
     return tokens;

@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include "enums.hpp"
+#include "Enums.hpp"
 
 struct LocationConfig {
     std::string path;
