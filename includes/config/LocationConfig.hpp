@@ -5,6 +5,7 @@
 #include "Enums.hpp"
 
 struct LocationConfig {
+    std::string modifier;
     std::string path;
     std::string root;
     std::string index;

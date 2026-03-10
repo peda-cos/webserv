@@ -6,5 +6,5 @@ struct SourcePosition {
     size_t line;
     size_t column;
 
-    SourcePosition() : line(0), column(0) {}
+    SourcePosition() : line(1), column(1) {}
 };

@@ -7,9 +7,6 @@ static std::map<std::string, ConfigDirectiveType> createRootDirectives() {
     std::map<std::string, ConfigDirectiveType> map;
     map["server"] = ROOT_SERVER;
     map["http"] = ROOT_HTTP;
-    map["location"] = ROOT_LOCATION;
-    map["listen"] = ROOT_LISTEN;
-    map["index"] = ROOT_INDEX;
     return map;
 }
 
@@ -17,9 +14,10 @@ static std::map<std::string, ConfigDirectiveType> createServerDirectives() {
     std::map<std::string, ConfigDirectiveType> map;
     map["listen"] = SERVER_LISTEN;
     map["location"] = SERVER_LOCATION;
-    map["server_name"] = SERVER_NAME;
-    map["client_max_body_size"] = CLIENT_MAX_BODY_SIZE;
-    map["error_page"] = ERROR_PAGE;
+    map["server_name"] = SERVER_NAMES;
+    map["client_max_body_size"] = SERVER_CLIENT_MAX_BODY_SIZE;
+    map["error_page"] = SERVER_ERROR_PAGE;
+    map["root"] = SERVER_ROOT;
     return map;
 }
 
@@ -28,6 +26,11 @@ static std::map<std::string, ConfigDirectiveType> createLocationDirectives() {
     map["root"] = LOCATION_ROOT;
     map["index"] = LOCATION_INDEX;
     map["methods"] = LOCATION_METHODS;
+    map["limit_except"] = LOCATION_LIMITS_EXCEPT;
+    map["autoindex"] = LOCATION_AUTOINDEX;
+    map["upload_store"] = LOCATION_UPLOAD_STORE;
+    map["cgi_pass"] = LOCATION_CGI_PASS;
+    map["return"] = LOCATION_REDIRECT;
     return map;
 }
 
