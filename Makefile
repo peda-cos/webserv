@@ -1,23 +1,33 @@
 NAME = webserv
-CXX = c++
-CXXFLAGS = -std=c++98 -Wall -Wextra -Werror -MMD -MP
+COMPILER = c++
+VERSION = -std=c++98
+DEPS_HEADERS = -MMD -MP
+SYNTAX = -Wall -Wextra -Werror
+# TODO: Validar se pode? - E a mesma coisa que willcard para sources ?
+INCLUDES = $(addprefix -I , $(shell find includes -type d)) 
+# ---------------------------------------------------------
+FLAGS = $(VERSION) $(SYNTAX) $(DEPS_HEADERS) $(INCLUDES)
 
-SRCS = srcs/main.cpp
+LEXER_SRCS = srcs/config/ConfigLexer.cpp
+PARSER_SRCS = srcs/config/ConfigParser.cpp
+UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp srcs/utils/Logger.cpp
 
-OBJS = $(SRCS:srcs/%.cpp=obj/%.o)
+SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS)
+
+OBJS = $(SRCS:srcs/%.cpp=objs/%.o)
 DEPS = $(OBJS:.o=.d)
 
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+	$(COMPILER) $(FLAGS) $(OBJS) -o $(NAME)
 
-obj/%.o: srcs/%.cpp
+objs/%.o: srcs/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(COMPILER) $(FLAGS) -c $< -o $@
 
 clean:
-	@rm -rf obj/
+	@rm -rf objs/
 
 fclean: clean
 	@rm -f $(NAME)
