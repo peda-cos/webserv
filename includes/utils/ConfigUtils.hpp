@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CONFIG_UTILS_HPP
+#define CONFIG_UTILS_HPP
 
 #include "ConfigToken.hpp"
 
@@ -9,3 +10,5 @@ class ConfigUtils {
         static bool is_valid_char_for_config_word(char c);
         static bool is_delimiter(char c);
 };
+
+#endif

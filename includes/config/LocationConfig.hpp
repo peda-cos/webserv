@@ -1,8 +1,9 @@
-#pragma once
+#ifndef LOCATION_CONFIG_HPP
+#define LOCATION_CONFIG_HPP
 
 #include <string>
 #include <vector>
-#include "Enums.hpp"
+#include <Enums.hpp>
 
 struct LocationConfig {
     std::string modifier;
@@ -16,3 +17,5 @@ struct LocationConfig {
     std::string return_url;
     int return_code;
 };
+
+#endif

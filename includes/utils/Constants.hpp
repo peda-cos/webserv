@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CONSTANTS_HPP
+#define CONSTANTS_HPP
 
 #include "ServerConfig.hpp"
 
@@ -8,3 +9,5 @@
 #define GREEN_COLOR "\033[32m"
 #define CYAN_COLOR "\033[36m"
 #define RESET_COLOR "\033[0m"
+
+#endif

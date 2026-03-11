@@ -1,18 +1,16 @@
-#include "ConfigLexer.hpp"
-#include "ParsingUtils.hpp"
-#include "ConfigUtils.hpp"
 #include <sstream>
+#include <ConfigUtils.hpp>
+#include <ConfigLexer.hpp>
+#include <ParsingUtils.hpp>
+#include <ConfigParseSyntaxException.hpp>
 
 ConfigLexer::ConfigLexer(const std::string& source) : 
     source(source), position(0), source_length(source.length()), source_position() {}
 
-const char* ConfigLexer::SourceInvalidSyntaxException::what() const throw() {
-    static std::string message;
+void ConfigLexer::throw_unexpected_char_error(char invalid_char) {
     std::stringstream ss;
-    ss << "'ConfigLexer': Invalid syntax in configuration file at "
-        << "line " << source_position.line  << ", column " << source_position.column;
-    message = ss.str();
-    return message.c_str();
+    ss << "Unexpected character '" << invalid_char << "'";
+    throw ConfigParse::SyntaxException(ss.str(), ConfigParse::CONFIG_LEXER, source_position);
 }
 
 void ConfigLexer::skip_comment() {
@@ -41,8 +39,7 @@ ConfigToken ConfigLexer::build_token() {
         && !ConfigUtils::is_delimiter(source[position])
         && !ParsingUtils::is_whitespace(source[position])) {
         if (!ConfigUtils::is_valid_char_for_config_word(source[position])) {
-            std::string invalid(1, source[position]);
-            throw SourceInvalidSyntaxException(source_position);
+            throw_unexpected_char_error(source[position]);
         }
         value += source[position];
         advance();
