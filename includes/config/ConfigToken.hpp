@@ -1,15 +1,18 @@
-#pragma once
+#ifndef CONFIG_TOKEN_HPP
+#define CONFIG_TOKEN_HPP
 
 #include <string>
-#include "Enums.hpp"
-#include "SourcePosition.hpp"
+#include <Enums.hpp>
+#include <SourcePosition.hpp>
 
 struct ConfigToken {
-    ConfigTokenType   type;
     std::string value;
+    ConfigTokenType type;
     SourcePosition source_position;
     ConfigDirectiveType directive_type;
 
     ConfigToken(const std::string& value, ConfigTokenType type, SourcePosition position)
-        : type(type), value(value), source_position(position), directive_type(UNKNOWN) {}
+        : value(value), type(type), source_position(position), directive_type(UNKNOWN) {}
 };
+
+#endif

@@ -1,15 +1,13 @@
 
-#include "ConfigLexer.hpp"
-#include "ParsingUtils.hpp"
-#include "ConfigUtils.hpp"
-#include "ConfigParser.hpp"
-#include "Logger.hpp"
+#include <ParsingUtils.hpp>
+#include <ConfigParser.hpp>
+#include <ConfigLexer.hpp>
+#include <ConfigUtils.hpp>
+#include <Logger.hpp>
 #include <iostream>
 
-
+// Mínimo Funcional
 void testConfigParser(std::string config_source) {
-    // Mínimo Funcional
-    
     ConfigLexer lexer(config_source);
     std::vector<ConfigToken> tokens = lexer.tokenize();
     ConfigParser parser(tokens);
@@ -26,7 +24,7 @@ void testConfigParser(std::string config_source) {
     std::cout << "Config properties:" << std::endl;
     for (size_t i = 0; i < config.servers.size(); ++i) {
         const ServerConfig& server = config.servers[i];
-        std::cout << "Server " << i + 1 << ":" << std::endl;
+        std::cout << std::endl << "Server " << i + 1 << ":" << std::endl;
         std::cout << "  Host: " << (server.host.empty() ? "default" : server.host) << std::endl;
         std::cout << "  Port: " << (server.port.empty() ? "default" : server.port) << std::endl;
         std::cout << "  Client Max Body Size: " << server.client_max_body_size << " bytes" << std::endl;
@@ -59,19 +57,16 @@ void testConfigParser(std::string config_source) {
 
 int main(int argc, char* argv[]) {
     std::string path = (argc > 1) ? argv[1] : "config/default.conf";
-        
-    try
-    {
+    try {
         std::string config_source = ConfigUtils::get_config_content(path);
         if (config_source.empty()) {
             Logger::error("Conf file is empty in path: " + path);
             return 1;
         }
         testConfigParser(config_source);
-    }
-    catch(const std::exception& e)
-    {
+    } catch(const std::exception& e) {
         Logger::error(e.what());
+        return 1;
     }
     return 0;
 }

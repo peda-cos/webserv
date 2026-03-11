@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PARSING_UTILS_HPP
+#define PARSING_UTILS_HPP
 
 #include <string>
 #include <vector>
@@ -12,3 +13,5 @@ class ParsingUtils {
         static ConfigDirectiveType get_server_directive_type(const std::string& word);
         static ConfigDirectiveType get_location_directive_type(const std::string& word);
 };
+
+#endif

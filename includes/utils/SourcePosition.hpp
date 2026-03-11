@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SOURCE_POSITION_HPP
+#define SOURCE_POSITION_HPP
 
 #include <string.h>
 
@@ -8,3 +9,5 @@ struct SourcePosition {
 
     SourcePosition() : line(1), column(1) {}
 };
+
+#endif

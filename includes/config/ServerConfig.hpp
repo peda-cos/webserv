@@ -1,10 +1,11 @@
-#pragma once
+#ifndef SERVER_CONFIG_HPP
+#define SERVER_CONFIG_HPP
 
 #include <string>
 #include <vector>
 #include <map>
-#include "Enums.hpp"
-#include "LocationConfig.hpp"
+#include <Enums.hpp>
+#include <LocationConfig.hpp>
 
 struct ServerConfig {
     std::string host;
@@ -19,3 +20,5 @@ struct ServerConfig {
     std::string root;
     std::vector<std::string> index;
 };
+
+#endif

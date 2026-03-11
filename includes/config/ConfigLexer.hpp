@@ -1,9 +1,10 @@
-#pragma once
+#ifndef CONFIG_LEXER_HPP
+#define CONFIG_LEXER_HPP
 
 #include <string>
 #include <vector>
-#include "ConfigToken.hpp"
-#include "SourcePosition.hpp"
+#include <ConfigToken.hpp>
+#include <SourcePosition.hpp>
 
 class ConfigLexer {
     private:
@@ -15,17 +16,12 @@ class ConfigLexer {
         void advance();
         void skip_comment();
         ConfigToken build_token();
+        void throw_unexpected_char_error(char invalid_char);
     public:
         ConfigLexer(const std::string& source);
 
         ConfigToken get_next_token();
         std::vector<ConfigToken> tokenize();
-
-        class SourceInvalidSyntaxException : public std::exception {
-            private:
-                SourcePosition source_position;
-            public:
-                SourceInvalidSyntaxException(const SourcePosition& pos) : source_position(pos) {}
-                virtual const char* what() const throw();
-        };
 };
+
+#endif

@@ -9,8 +9,10 @@ INCLUDES = $(addprefix -I , $(shell find includes -type d))
 FLAGS = $(VERSION) $(SYNTAX) $(DEPS_HEADERS) $(INCLUDES)
 
 LEXER_SRCS = srcs/config/ConfigLexer.cpp
-PARSER_SRCS = srcs/config/ConfigParser.cpp
 UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp srcs/utils/Logger.cpp
+PARSER_SRCS = srcs/config/ConfigParser.cpp srcs/config/ParserSyntaxError.cpp \
+	srcs/config/ConfigParserServer.cpp srcs/config/ConfigParserLocation.cpp \
+	
 
 SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS)
 

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LOGGER_HPP
+#define LOGGER_HPP
 
 #include <string>
 #include "Constants.hpp"
@@ -10,3 +11,5 @@ class Logger {
         static void debug(const std::string& message);
         static void error(const std::string& message);
 };
+
+#endif
