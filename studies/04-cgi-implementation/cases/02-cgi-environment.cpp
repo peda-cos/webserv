@@ -250,6 +250,8 @@ void case_7_overwrite_behavior()
 }
 
 // Case 8: Practical CGI script execution pattern
+
+// Case 8: Practical CGI script execution pattern
 void case_8_realistic_cgi()
 {
     print_separator("Case 8: Realistic CGI Pattern");
@@ -292,15 +294,42 @@ void case_8_realistic_cgi()
     std::cout << "  (Would output: Hello, Alice!)" << std::endl;
 }
 
+// Case 9: The Approach (envp)
+void case_9_envp_approach()
+{
+    print_separator("Case 9: envp Approach (Isolated)");
+    
+    std::cout << "Parent: Creating a completely isolated environment array..." << std::endl;
+
+    // In a real webserver, this would be inside your CgiEnvBuilder
+    const char* custom_env[] = {
+        "REQUEST_METHOD=GET",
+        "QUERY_STRING=user=jonnathan&mode=pro",
+        "SERVER_PROTOCOL=HTTP/1.1",
+        "CUSTOM_VAR=Isolated_Value",
+        NULL // CRITICAL: Must end with NULL
+    };
+
+    std::cout << "Parent: About to fork and use execve with custom_env" << std::endl;
+    
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child: execve(path, argv, envp)
+        // envp (the 3rd arg) REPLACES the inherited environment
+        const char* args[] = { "env", NULL };
+        execve("/usr/bin/env", (char* const*)args, (char* const*)custom_env);
+        
+        std::cerr << "Execve failed!" << std::endl;
+        exit(1);
+    } else {
+        waitpid(pid, NULL, 0);
+        std::cout << "Parent: Child finished. Notice that Parent's environment remained pure." << std::endl;
+    }
+}
+
 int main()
 {
-    std::cout << "\n" << std::endl;
-    std::cout << "████████████████████████████████████████████████████" << std::endl;
-    std::cout << "█                                                    █" << std::endl;
-    std::cout << "█  Environment Variables for CGI                    █" << std::endl;
-    std::cout << "█  Educational Test Cases                           █" << std::endl;
-    std::cout << "█                                                    █" << std::endl;
-    std::cout << "████████████████████████████████████████████████████" << std::endl;
+    // ... header ...
     
     case_1_read_environment();
     case_2_setenv_basic();
@@ -310,9 +339,10 @@ int main()
     case_6_execute_with_env();
     case_7_overwrite_behavior();
     case_8_realistic_cgi();
+    case_9_envp_approach();
     
     print_separator("All cases completed!");
-    std::cout << "\nKey takeaway: Set ALL variables BEFORE fork(), they are inherited." << std::endl;
+    std::cout << "\nKey takeaway: setenv() is EASY, but envp is SAFE and ISOLATED for servers." << std::endl;
     
     return 0;
 }

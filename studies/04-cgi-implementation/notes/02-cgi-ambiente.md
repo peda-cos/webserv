@@ -146,6 +146,23 @@ char* var = strdup("REQUEST_METHOD=GET");
 
 ---
 
+## Opção 3: Usando `envp` Customizado (Abordagem Webserver Profissional)
+
+Esta é a abordagem mais robusta para servidores que lidam com múltiplas requisições simultâneas, pois evita a poluição do ambiente do processo pai.
+
+### Por que usar `envp` em vez de `setenv()`?
+
+1. **Isolamento Total**: `setenv()` modifica o ambiente do seu servidor (processo pai). Se duas requisições CGI rodarem ao mesmo tempo, uma pode sobrescrever os dados da outra.
+2. **Segurança**: O script filho recebe **apenas** as variáveis que você explicitamente definiu no array, ignorando variáveis sensíveis do seu sistema (como `PATH` ou `USER` do servidor).
+3. **Gerenciamento de Memória**: Você controla exatamente quando as strings do ambiente são criadas e destruídas via `char**`.
+
+### Fluxo com `envp`:
+1. Monte um `std::map<string, string>` com as variáveis.
+2. Converta o mapa para um `char** envp` (array de ponteiros terminado em `NULL`).
+3. Passe este array como terceiro argumento do `execve()`.
+
+---
+
 ## Padrão de Uso em Código C++98
 
 ```cpp
