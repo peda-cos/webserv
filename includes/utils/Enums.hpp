@@ -11,4 +11,8 @@ enum ConfigDirectiveType {
     LOCATION_ROOT, LOCATION_INDEX, LOCATION_METHODS, LOCATION_LIMITS_EXCEPT, LOCATION_AUTOINDEX, LOCATION_UPLOAD_STORE, LOCATION_CGI_PASS, LOCATION_REDIRECT,
 };
 
+enum HttpRequestAttribute {
+    method, uri_path, version, headers, query_parameters, body
+};
+
 #endif
