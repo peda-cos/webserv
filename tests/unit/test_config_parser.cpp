@@ -432,5 +432,167 @@ TEST(ConfigParser, CgiHandlerRelativePathThrows)
 	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
 }
 
+/* ========================================================================== */
+/* RFC 7231 & NGINX Behavior Compliance Tests (25-30)                        */
+/* ========================================================================== */
+
+/* ------------------------------------------------------------------------ */
+/* 25. GET in limit_except must automatically add HEAD (RFC 7231 § 4.3.2).   */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, GetImpliesHeadRfc7231)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    location / {\n"
+		"        limit_except GET;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> servers = TestConfigParser::parse(conf);
+	const LocationConfig& loc = servers[0].locations[0];
+	
+	// Both GET and HEAD must be present
+	bool has_get = false, has_head = false;
+	for (size_t i = 0; i < loc.limit_except.size(); ++i) {
+		if (loc.limit_except[i] == GET) has_get = true;
+		if (loc.limit_except[i] == HEAD) has_head = true;
+	}
+	ASSERT_TRUE(has_get);
+	ASSERT_TRUE(has_head);
+}
+
+/* ------------------------------------------------------------------------ */
+/* 26. Location inherits server error_pages when not overridden.             */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, LocationInheritsServerErrorPages)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    error_page 404 /errors/404.html;\n"
+		"    error_page 500 /errors/500.html;\n"
+		"    location / {\n"
+		"        limit_except GET;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> servers = TestConfigParser::parse(conf);
+	const LocationConfig& loc = servers[0].locations[0];
+	
+	ASSERT_EQ(2, static_cast<int>(loc.error_pages.size()));
+	ASSERT_EQ(std::string("/errors/404.html"), loc.error_pages.at(404));
+	ASSERT_EQ(std::string("/errors/500.html"), loc.error_pages.at(500));
+}
+
+/* ------------------------------------------------------------------------ */
+/* 27. Location can override specific error_page from server.                */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, LocationOverridesServerErrorPage)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    error_page 404 /errors/404.html;\n"
+		"    error_page 500 /errors/500.html;\n"
+		"    location /api {\n"
+		"        limit_except GET POST;\n"
+		"        error_page 404 /api/not_found.json;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> servers = TestConfigParser::parse(conf);
+	const LocationConfig& loc = servers[0].locations[0];
+	
+	// 404 should be overridden to /api/not_found.json
+	ASSERT_EQ(std::string("/api/not_found.json"), loc.error_pages.at(404));
+	// 500 should remain from server inheritance
+	ASSERT_EQ(std::string("/errors/500.html"), loc.error_pages.at(500));
+	ASSERT_EQ(2, static_cast<int>(loc.error_pages.size()));
+}
+
+/* ------------------------------------------------------------------------ */
+/* 28. Location can add new error_page codes not in server.                 */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, LocationAddsNewErrorPageCode)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    error_page 404 /errors/404.html;\n"
+		"    location /service {\n"
+		"        limit_except GET;\n"
+		"        error_page 503 /service/unavailable.html;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> servers = TestConfigParser::parse(conf);
+	const LocationConfig& loc = servers[0].locations[0];
+	
+	// Should have both inherited 404 and new 503
+	ASSERT_EQ(2, static_cast<int>(loc.error_pages.size()));
+	ASSERT_EQ(std::string("/errors/404.html"), loc.error_pages.at(404));
+	ASSERT_EQ(std::string("/service/unavailable.html"), loc.error_pages.at(503));
+}
+
+/* ------------------------------------------------------------------------ */
+/* 29. Multiple locations can override different error_page codes.           */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, MultipleLocationErrorPageOverrides)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    error_page 404 /errors/404.html;\n"
+		"    error_page 500 /errors/500.html;\n"
+		"    location /api {\n"
+		"        limit_except GET;\n"
+		"        error_page 404 /api/404.json;\n"
+		"    }\n"
+		"    location /admin {\n"
+		"        limit_except POST;\n"
+		"        error_page 500 /admin/500.html;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> servers = TestConfigParser::parse(conf);
+	const LocationConfig& api_loc = servers[0].locations[0];
+	const LocationConfig& admin_loc = servers[0].locations[1];
+	
+	// /api overrides 404
+	ASSERT_EQ(std::string("/api/404.json"), api_loc.error_pages.at(404));
+	ASSERT_EQ(std::string("/errors/500.html"), api_loc.error_pages.at(500));
+	
+	// /admin overrides 500
+	ASSERT_EQ(std::string("/errors/404.html"), admin_loc.error_pages.at(404));
+	ASSERT_EQ(std::string("/admin/500.html"), admin_loc.error_pages.at(500));
+}
+
+/* ------------------------------------------------------------------------ */
+/* 30. Location error_page with multiple codes on same directive.            */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, LocationErrorPageMultipleCodes)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    error_page 404 500 502 503 /errors/generic.html;\n"
+		"    location /api {\n"
+		"        limit_except GET;\n"
+		"        error_page 400 402 /api/client_error.json;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> servers = TestConfigParser::parse(conf);
+	const LocationConfig& loc = servers[0].locations[0];
+	
+	// Inherited from server: 404, 500, 502, 503
+	// Added by location: 400, 402
+	ASSERT_EQ(6, static_cast<int>(loc.error_pages.size()));
+	ASSERT_EQ(std::string("/api/client_error.json"), loc.error_pages.at(400));
+	ASSERT_EQ(std::string("/api/client_error.json"), loc.error_pages.at(402));
+	ASSERT_EQ(std::string("/errors/generic.html"), loc.error_pages.at(404));
+}
+
 MINITEST_MAIN()
 

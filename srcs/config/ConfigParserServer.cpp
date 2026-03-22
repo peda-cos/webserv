@@ -116,6 +116,7 @@ ServerConfig ConfigParserServer::parse() {
             case SERVER_ERROR_PAGE: parse_error_page(); break;
             case SERVER_LOCATION: {
                 ConfigParserLocation location_parser(parser);
+                location_parser.inherit_error_pages_from_server(server_config.error_pages);
                 LocationConfig location_config = location_parser.parse();
                 server_config.locations.push_back(location_config);
                 continue;
