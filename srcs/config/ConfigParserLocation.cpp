@@ -2,6 +2,7 @@
 #include <sstream>
 #include <Logger.hpp>
 #include <ParsingUtils.hpp>
+#include <ParserDirectiveUtils.hpp>
 #include <ConfigParserLocation.hpp>
 #include <ConfigParseSyntaxException.hpp>
 
@@ -65,6 +66,7 @@ void ConfigParserLocation::parse_location_autoindex() {
 
 void ConfigParserLocation::parse_location_methods() {
     parser.validates_directive_value_for("limit_except");
+    bool has_at_least_one_method = false;
     while (parser.current_token.type == WORD) {
         HttpMethod method;
         if (parser.current_token.value == "GET") method = GET;
@@ -77,9 +79,17 @@ void ConfigParserLocation::parse_location_methods() {
         else if (parser.current_token.value == "TRACE") method = TRACE;
         else if (parser.current_token.value == "PATCH") method = PATCH;
         else throw_unexpected_token_error("Invalid HTTP method in 'limit_except' directive: " + parser.current_token.value);
+
+        if (ParserDirectiveUtils::has_method(location_config.limit_except, method)) {
+            throw_unexpected_token_error(
+                "Duplicated HTTP method in 'limit_except' directive: " + parser.current_token.value);
+        }
         location_config.limit_except.push_back(method);
+        has_at_least_one_method = true;
         parser.advance();
     }
+    if (!has_at_least_one_method)
+        throw_unexpected_token_error("'limit_except' directive requires at least one HTTP method");
     if (parser.current_token.type != SEMICOLON)
         throw_unexpected_token_error("Unexpected token after 'limit_except' directive value: " + parser.current_token.value);
 }
@@ -98,7 +108,7 @@ void ConfigParserLocation::parse_location_cgi_pass() {
 
 void ConfigParserLocation::parse_location_redirect() {
     parser.validates_directive_value_for("return");
-        if (location_config.return_code != 0) {
+    if (location_config.return_code != 0) {
         throw_unexpected_token_error(
             "Multiple 'return' directives in the same location block are not allowed");
     }
@@ -107,15 +117,21 @@ void ConfigParserLocation::parse_location_redirect() {
         parts.push_back(parser.current_token.value);
         parser.advance();
     }
+    if (parser.current_token.type != SEMICOLON)
+        throw_unexpected_token_error("Unexpected token after 'return' directive value: " + parser.current_token.value);
     if (parts.size() != 2)
         throw_unexpected_token_error("'return' requires exactly 2 arguments: code and URL");
     std::stringstream ss(parts[0]);
-    int return_code;
-    if (!(ss >> return_code))
+    int return_code = 0;
+    if (!(ss >> return_code) || !ss.eof())
         throw_unexpected_token_error("Invalid HTTP status code: " + parts[0]);
+    if (!ParserDirectiveUtils::is_valid_redirect_status_code(return_code))
+        throw_unexpected_token_error("'return' directive only supports redirect status codes (3xx): " + parts[0]);
+    if (!ParserDirectiveUtils::is_valid_redirect_target(parts[1]))
+        throw_unexpected_token_error("Invalid URL in 'return' directive: " + parts[1]);
+
     location_config.return_code = return_code;
     location_config.return_url = parts[1];
-    parser.validates_extra_arguments_in("return");
 }
 
 void ConfigParserLocation::parse_location_root() {
