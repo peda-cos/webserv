@@ -31,6 +31,7 @@ static std::map<std::string, ConfigDirectiveType> createLocationDirectives() {
     map["upload_store"] = LOCATION_UPLOAD_STORE;
     map["cgi_pass"] = LOCATION_CGI_PASS;
     map["return"] = LOCATION_REDIRECT;
+    map["error_page"] = LOCATION_ERROR_PAGE;
     return map;
 }
 

@@ -62,6 +62,14 @@ void testConfigParser(std::string config_source) {
             if (location.return_code != 0) {
                 std::cout << "      Return: " << location.return_code << " " << location.return_url << std::endl;
             }
+            std::cout << "      Error Pages (inherited from server):" << std::endl;
+            if (location.error_pages.empty()) {
+                std::cout << "        (none)" << std::endl;
+            } else {
+                for (std::map<int, std::string>::const_iterator it = location.error_pages.begin(); it != location.error_pages.end(); ++it) {
+                    std::cout << "        " << it->first << " -> " << it->second << std::endl;
+                }
+            }
         }
     }
     std::cout << std::endl;

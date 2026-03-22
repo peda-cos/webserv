@@ -17,6 +17,7 @@ struct LocationConfig {
     std::map<std::string, std::string> cgi_handlers;
     std::string return_url;
     int return_code;
+    std::map<int, std::string> error_pages;
 };
 
 #endif

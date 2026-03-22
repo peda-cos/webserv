@@ -16,6 +16,7 @@ ConfigParserLocation::ConfigParserLocation(ConfigParser &parser) : parser(parser
     location_config.cgi_handlers = std::map<std::string, std::string>();
     location_config.return_url = "";
     location_config.return_code = 0;
+    location_config.error_pages = std::map<int, std::string>();
 }
 
 void ConfigParserLocation::throw_unexpected_token_error(const std::string& message) {
@@ -92,6 +93,11 @@ void ConfigParserLocation::parse_location_methods() {
         throw_unexpected_token_error("'limit_except' directive requires at least one HTTP method");
     if (parser.current_token.type != SEMICOLON)
         throw_unexpected_token_error("Unexpected token after 'limit_except' directive value: " + parser.current_token.value);
+    if (ParserDirectiveUtils::has_method(location_config.limit_except, GET)) {
+        if (!ParserDirectiveUtils::has_method(location_config.limit_except, HEAD)) {
+            location_config.limit_except.push_back(HEAD);
+        }
+    }
 }
 
 void ConfigParserLocation::parse_location_upload_store() {
@@ -162,6 +168,33 @@ void ConfigParserLocation::parse_location_root() {
     parser.validates_extra_arguments_in("root");
 }
 
+void ConfigParserLocation::parse_location_error_page() {
+    parser.validates_directive_value_for("error_page");
+    std::vector<std::string> parts = std::vector<std::string>();
+    while (parser.current_token.type == WORD) {
+        parts.push_back(parser.current_token.value);
+        parser.advance();
+    }
+    if (parser.current_token.type != SEMICOLON)
+        throw_unexpected_token_error("Unexpected token after 'error_page' directive value: " + parser.current_token.value);
+    if (parts.size() < 2)
+        throw_unexpected_token_error("error_page directive requires at least one status code and a path");
+
+    std::string path = parts[parts.size() - 1];
+    if (!ParserDirectiveUtils::is_valid_error_page_path(path))
+        throw_unexpected_token_error("error_page path must start with '/', '@', or 'http': " + path);
+
+    for (size_t i = 0; i < parts.size() - 1; ++i) {
+        std::stringstream ss(parts[i]);
+        int error_code = 0;
+        if (!(ss >> error_code) || !ss.eof())
+            throw_unexpected_token_error("Invalid error code: " + parts[i]);
+        if (!ParserDirectiveUtils::is_valid_error_status_code(error_code))
+            throw_unexpected_token_error("Unsupported error code in 'error_page': " + parts[i]);
+        location_config.error_pages[error_code] = path;
+    }
+}
+
 LocationConfig ConfigParserLocation::parse() {
     std::string directive("location");
     parser.validates_directive_value_for(directive);
@@ -179,6 +212,7 @@ LocationConfig ConfigParserLocation::parse() {
             case LOCATION_UPLOAD_STORE: parse_location_upload_store(); break;
             case LOCATION_CGI_PASS: parse_location_cgi_pass(); break;
             case LOCATION_REDIRECT: parse_location_redirect(); break;
+            case LOCATION_ERROR_PAGE: parse_location_error_page(); break;
             default: parser.log_token_alert(directive); break;
         }
         parser.advance();
@@ -186,4 +220,8 @@ LocationConfig ConfigParserLocation::parse() {
     parser.validates_char_block_at(directive);
 
     return location_config;
+}
+
+void ConfigParserLocation::inherit_error_pages_from_server(const std::map<int, std::string>& server_error_pages) {
+    location_config.error_pages = server_error_pages;
 }
