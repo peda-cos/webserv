@@ -21,6 +21,9 @@ namespace ParserDirectiveUtils {
     bool is_valid_redirect_status_code(int status_code);
     bool is_valid_redirect_target(const std::string& target);
 
+    bool is_valid_cgi_extension(const std::string& extension);
+    bool is_valid_cgi_handler_path(const std::string& path);
+
     bool has_method(const std::vector<HttpMethod>& methods, HttpMethod method);
 }
 

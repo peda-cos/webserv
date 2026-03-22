@@ -164,4 +164,23 @@ namespace ParserDirectiveUtils {
         }
         return false;
     }
+
+    bool is_valid_cgi_extension(const std::string& extension) {
+        if (extension.empty() || extension[0] != '.')
+            return false;
+        if (extension.size() < 2)
+            return false;
+        for (size_t i = 1; i < extension.size(); ++i) {
+            unsigned char c = static_cast<unsigned char>(extension[i]);
+            if (!std::isalnum(c) && c != '_')
+                return false;
+        }
+        return true;
+    }
+
+    bool is_valid_cgi_handler_path(const std::string& path) {
+        if (path.empty() || path[0] != '/')
+            return false;
+        return true;
+    }
 }

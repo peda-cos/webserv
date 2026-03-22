@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <Enums.hpp>
 
 struct LocationConfig {
@@ -13,7 +14,7 @@ struct LocationConfig {
     AutoIndex autoindex;
     std::vector<HttpMethod> limit_except;
     std::string upload_store;
-    std::string cgi_pass;
+    std::map<std::string, std::string> cgi_handlers;
     std::string return_url;
     int return_code;
 };
