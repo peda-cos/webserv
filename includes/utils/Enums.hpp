@@ -3,6 +3,7 @@
 
 enum AutoIndex { ON, OFF };
 enum HttpMethod { GET, POST, DELETE, PUT, HEAD, CONNECT, OPTIONS, TRACE, PATCH };
+enum HttpStatusCode { OK = 200, BAD_REQUEST = 400, NOT_FOUND = 404, INTERNAL_SERVER_ERROR = 500 };
 enum ConfigTokenType { WORD, RIGHT_BRACE, LEFT_BRACE, SEMICOLON, EOF_TOKEN, COMMENT, NEWLINE };
 
 enum ConfigDirectiveType { 
