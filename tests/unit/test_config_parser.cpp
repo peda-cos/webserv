@@ -146,7 +146,7 @@ TEST(ConfigParser, LocationSubDirectives)
 		"\n"
 		"    location /cgi-bin {\n"
 		"        root /var/www/cgi;\n"
-		"        cgi_pass .py;\n"
+		"        cgi_pass .py /usr/bin/python3;\n"
 		"    }\n"
 		"}\n";
 
@@ -169,7 +169,9 @@ TEST(ConfigParser, LocationSubDirectives)
 	const LocationConfig& cgi = result[0].locations[1];
 	ASSERT_EQ(std::string("/cgi-bin"), cgi.path);
 	ASSERT_EQ(std::string("/var/www/cgi"), cgi.root);
-	ASSERT_EQ(std::string(".py"), cgi.cgi_pass);
+	ASSERT_EQ(1, static_cast<int>(cgi.cgi_handlers.size()));
+	ASSERT_TRUE(cgi.cgi_handlers.find(".py") != cgi.cgi_handlers.end());
+	ASSERT_EQ(std::string("/usr/bin/python3"), cgi.cgi_handlers.at(".py"));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -357,4 +359,78 @@ TEST(ConfigParser, ClientMaxBodySizeNoDigitsThrows)
 	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
 }
 
+/* ------------------------------------------------------------------------ */
+/* 21. Multiple CGI handlers (.py and .php) must all be stored.             */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, MultipleCgiHandlers)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    location /cgi-bin {\n"
+		"        cgi_pass .py /usr/bin/python3;\n"
+		"        cgi_pass .php /usr/bin/php-cgi;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
+	ASSERT_EQ(1, static_cast<int>(result.size()));
+	const LocationConfig& loc = result[0].locations[0];
+	ASSERT_EQ(2, static_cast<int>(loc.cgi_handlers.size()));
+	ASSERT_TRUE(loc.cgi_handlers.find(".py") != loc.cgi_handlers.end());
+	ASSERT_TRUE(loc.cgi_handlers.find(".php") != loc.cgi_handlers.end());
+	ASSERT_EQ(std::string("/usr/bin/python3"), loc.cgi_handlers.at(".py"));
+	ASSERT_EQ(std::string("/usr/bin/php-cgi"), loc.cgi_handlers.at(".php"));
+}
+
+/* ------------------------------------------------------------------------ */
+/* 22. CGI extension missing dot must throw.                                */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, CgiExtensionMissingDotThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    location /cgi {\n"
+		"        cgi_pass py /usr/bin/python3;\n"
+		"    }\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* ------------------------------------------------------------------------ */
+/* 23. Duplicate CGI extension in same location must throw.                 */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, DuplicateCgiExtensionThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py /usr/bin/python3;\n"
+		"        cgi_pass .py /usr/bin/python2;\n"
+		"    }\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* ------------------------------------------------------------------------ */
+/* 24. CGI handler path must be absolute (start with /).                    */
+/* ------------------------------------------------------------------------ */
+TEST(ConfigParser, CgiHandlerRelativePathThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 0.0.0.0:8080;\n"
+		"    location /cgi {\n"
+		"        cgi_pass .py usr/bin/python3;\n"
+		"    }\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
 MINITEST_MAIN()
+

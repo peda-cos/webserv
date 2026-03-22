@@ -13,7 +13,7 @@ ConfigParserLocation::ConfigParserLocation(ConfigParser &parser) : parser(parser
     location_config.autoindex = OFF;
     location_config.limit_except = std::vector<HttpMethod>();
     location_config.upload_store = "";
-    location_config.cgi_pass = "";
+    location_config.cgi_handlers = std::map<std::string, std::string>();
     location_config.return_url = "";
     location_config.return_code = 0;
 }
@@ -102,7 +102,29 @@ void ConfigParserLocation::parse_location_upload_store() {
 
 void ConfigParserLocation::parse_location_cgi_pass() {
     parser.validates_directive_value_for("cgi_pass");
-    location_config.cgi_pass = parser.current_token.value;
+    std::string extension = parser.current_token.value;
+    
+    if (!ParserDirectiveUtils::is_valid_cgi_extension(extension)) {
+        throw_unexpected_token_error("Invalid CGI extension format (must start with '.'): " + extension);
+    }
+    
+    parser.advance();
+    
+    if (parser.current_token.type != WORD) {
+        throw_unexpected_token_error("cgi_pass directive requires extension and handler path");
+    }
+    
+    std::string handler_path = parser.current_token.value;
+    
+    if (!ParserDirectiveUtils::is_valid_cgi_handler_path(handler_path)) {
+        throw_unexpected_token_error("Invalid CGI handler path (must start with '/' for absolute path): " + handler_path);
+    }
+    
+    if (location_config.cgi_handlers.find(extension) != location_config.cgi_handlers.end()) {
+        throw_unexpected_token_error("Duplicate cgi_pass extension: " + extension);
+    }
+    
+    location_config.cgi_handlers[extension] = handler_path;
     parser.validates_extra_arguments_in("cgi_pass");
 }
 
