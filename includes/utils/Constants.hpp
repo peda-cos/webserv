@@ -10,4 +10,6 @@
 #define CYAN_COLOR "\033[36m"
 #define RESET_COLOR "\033[0m"
 
+#define CARRIAGE_RETURN_LINE_FEED "\r\n"
+
 #endif

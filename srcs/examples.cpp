@@ -75,8 +75,7 @@ void testCGIExecutor() {
     CgiEnvBuilder env_builder(http_request, location_config);
     char** envp = env_builder.getEnvp();
 
-    std::cout << "CGI Environment Variables:" << std::endl << std::endl;
-    for (size_t i = 0; envp[i] != NULL; ++i) {
-        std::cout << envp[i] << std::endl;
-    }
+    CgiExecutor executor;
+    std::string cgi_output = executor.execute(http_request, envp);
+    std::cout << "CGI Output:\n" << cgi_output << std::endl;
 }
