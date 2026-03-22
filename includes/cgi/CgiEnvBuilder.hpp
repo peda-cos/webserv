@@ -16,10 +16,10 @@ class CgiEnvBuilder {
         void build_headers_envs(const HttpRequest& request);
         void build_query_string_env(const StringMap& params);
         void build_envs_for_post_request(const HttpRequest& request);
-        void build_fundamental_envs(const HttpRequest& request, const LocationConfig& location_config);
+        void build_fundamental_envs(const HttpRequest& request);
     
     public:
-        CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location_config);
+        CgiEnvBuilder(const HttpRequest& request);
         ~CgiEnvBuilder();
 
         char** getEnvp() const;

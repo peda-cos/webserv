@@ -82,22 +82,20 @@ void testCGIExecutor() {
     HttpRequest http_request;
 
     http_request.setMethod(POST)
-                .setUriPath("/cgi-bin/script.cgi")
+                .setUriPath("/cgi/script.py")
                 .setVersion("HTTP/1.1")
                 .addHeader("Host", "localhost")
                 .addHeader("User-Agent", "Mozilla/5.0")
                 .addHeader("Content-Type", "application/x-www-form-urlencoded")
                 .addHeader("Content-Length", "27")
-                .setBody("name=John&age=30");
+                .setBody("Client data for CGI script");
 
     LocationConfig location_config;
-    location_config.path = "/cgi-bin/";
+    location_config.path = "/cgi/";
+    location_config.root = "www";
     location_config.cgi_handlers[".py"] = "/usr/bin/python3";
 
-    CgiEnvBuilder env_builder(http_request, location_config);
-    char** envp = env_builder.getEnvp();
-
     CgiExecutor executor;
-    std::string cgi_output = executor.execute(http_request, envp);
-    std::cout << "CGI Output:\n" << cgi_output << std::endl;
+    std::string cgi_output = executor.execute(http_request, location_config);
+    Logger::info("CGI Output:\n" + cgi_output);
 }

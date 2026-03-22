@@ -4,11 +4,11 @@
 #include <HttpUtils.hpp>
 #include <sstream>
 
-void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const LocationConfig& location_config) {
+void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request) {
     env_map["SERVER_PROTOCOL"] = request.version;
     env_map["SERVER_SOFTWARE"] = "Webserv/1.0"; // TODO: tornar dinâmico com base no nome do servidor e versão, como ?
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
-    env_map["SCRIPT_NAME"] = location_config.cgi_pass; // TODO: ajustar para refletir o caminho correto do script CGI
+    env_map["SCRIPT_NAME"] = request.uri_path;
     env_map["REQUEST_METHOD"] = HttpUtils::method_to_string(request.method);
     env_map["REQUEST_URI"] = request.uri_path;
     env_map["PATH_INFO"] = "PENDENTE"; // TODO: Entender melhor essa variável e como preenchê-la corretamente
@@ -58,8 +58,8 @@ void CgiEnvBuilder::build_envp() {
     envp[index] = NULL;
 }
 
-CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location_config) {
-    build_fundamental_envs(request, location_config);
+CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request) : envp(NULL) {
+    build_fundamental_envs(request);
     build_query_string_env(request.query_parameters);
     if (request.method == POST) {
         build_envs_for_post_request(request);

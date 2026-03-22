@@ -37,10 +37,7 @@ TEST(CgiEnv, RequestMethodGet)
 	   .setUriPath("/cgi-bin/test.py")
 	   .setVersion("HTTP/1.1");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/test.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 	
 	ASSERT_EQ(std::string("GET"), env["REQUEST_METHOD"]);
@@ -57,10 +54,7 @@ TEST(CgiEnv, RequestMethodPost)
 	   .setVersion("HTTP/1.1")
 	   .setBody("data=hello");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/submit.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 
 	ASSERT_EQ(std::string("POST"), env["REQUEST_METHOD"]);
@@ -78,10 +72,7 @@ TEST(CgiEnv, ContentTypeFromHeaders)
 	   .setBody("{\"key\":\"value\"}")
 	   .addHeader("Content-Type", "application/json");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/api.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 
 	ASSERT_EQ(std::string("application/json"), env["CONTENT_TYPE"]);
@@ -99,10 +90,7 @@ TEST(CgiEnv, ContentLengthFromHeaders)
 	   .setBody("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
 	// Note: Content-Length is built from body size in CgiEnvBuilder
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/upload.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 
 	ASSERT_EQ(std::string("44"), env["CONTENT_LENGTH"]);
@@ -118,10 +106,7 @@ TEST(CgiEnv, PathInfoFromUri)
 	   .setUriPath("/cgi-bin/script.py/extra/path")
 	   .setVersion("HTTP/1.1");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/script.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 	
 	// Currently returns "PENDENTE" in your implementation, updating test to reflect that or expect fix
@@ -139,10 +124,7 @@ TEST(CgiEnv, QueryStringFromUri)
 	   .setVersion("HTTP/1.1")
 	   .addQueryParameter("key", "value");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/search.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 
 	ASSERT_EQ(std::string("key=value"), env["QUERY_STRING"]);
@@ -158,10 +140,7 @@ TEST(CgiEnv, ServerProtocol)
 	   .setUriPath("/cgi-bin/info.py")
 	   .setVersion("HTTP/1.1");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/info.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 
 	ASSERT_EQ(std::string("HTTP/1.1"), env["SERVER_PROTOCOL"]);
@@ -179,10 +158,7 @@ TEST(CgiEnv, EssentialVarsPresent)
 	   .setBody("payload")
 	   .addHeader("Content-Type", "text/plain");
 
-	LocationConfig config;
-	config.cgi_pass = "/var/www/cgi/full.py";
-
-	CgiEnvBuilder builder(req, config);
+	CgiEnvBuilder builder(req);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 
 	const char* required[] = {

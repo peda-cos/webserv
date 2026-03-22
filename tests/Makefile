@@ -17,6 +17,7 @@ UNIT_SRCS = \
 	$(UNIT_DIR)/test_http_response_builder.cpp \
 	$(UNIT_DIR)/test_method_handlers.cpp \
 	$(UNIT_DIR)/test_cgi_env.cpp \
+	$(UNIT_DIR)/test_cgi_executor.cpp \
 	$(UNIT_DIR)/test_chunked_decoder.cpp
 
 UNIT_BINS = $(UNIT_SRCS:.cpp=)
@@ -64,13 +65,17 @@ $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.c
 $(UNIT_DIR)/test_method_handlers: $(UNIT_DIR)/test_method_handlers.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
 
-UTILS_SRCS = ../srcs/utils/CgiUtils.cpp ../srcs/utils/HttpUtils.cpp ../srcs/utils/Logger.cpp ../srcs/utils/ParsingUtils.cpp
+UTILS_SRCS = ../srcs/utils/CgiUtils.cpp ../srcs/utils/HttpUtils.cpp ../srcs/utils/Logger.cpp ../srcs/utils/ParsingUtils.cpp ../srcs/utils/StringUtils.cpp
 HTTP_SRCS = ../srcs/http/HttpRequest.cpp
 CGI_SRCS = ../srcs/cgi/CgiEnvBuilder.cpp
 TEST_CGI_SRCS = $(UTILS_SRCS) $(HTTP_SRCS) $(CGI_SRCS)
+TEST_CGI_EXECUTOR_SRCS = $(UTILS_SRCS) $(HTTP_SRCS) ../srcs/cgi/CgiEnvBuilder.cpp ../srcs/cgi/CgiExecutor.cpp ../srcs/cgi/CgiPipeManager.cpp
 
 $(UNIT_DIR)/test_cgi_env: $(UNIT_DIR)/test_cgi_env.cpp $(FRAMEWORK_DIR)/minitest.hpp $(TEST_CGI_SRCS)
 	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_SRCS)
+
+$(UNIT_DIR)/test_cgi_executor: $(UNIT_DIR)/test_cgi_executor.cpp $(FRAMEWORK_DIR)/minitest.hpp $(TEST_CGI_EXECUTOR_SRCS)
+	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_EXECUTOR_SRCS)
 
 $(UNIT_DIR)/test_chunked_decoder: $(UNIT_DIR)/test_chunked_decoder.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
