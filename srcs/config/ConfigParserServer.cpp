@@ -1,6 +1,7 @@
 #include <sstream>
 #include <Logger.hpp>
 #include <ParsingUtils.hpp>
+#include <ParserDirectiveUtils.hpp>
 #include <ConfigParserServer.hpp>
 #include <ConfigParserLocation.hpp>
 #include <ConfigParseSyntaxException.hpp>
@@ -28,9 +29,16 @@ void ConfigParserServer::parse_server_listen() {
     std::vector<std::string> parts = ParsingUtils::split(parser.current_token.value, ':');
     if (parts.size() == 0 || parts.size() > 2)
         throw_unexpected_token_error("Invalid format for 'listen' directive: " + parser.current_token.value);
+    int parsed_port = 0;
     if (parts.size() == 1) {
+        if (!ParserDirectiveUtils::parse_port(parts[0], parsed_port))
+            throw_unexpected_token_error("Invalid port in 'listen' directive: " + parts[0]);
         server_config.port = parts[0];
     } else {
+        if (!ParserDirectiveUtils::is_valid_listen_host(parts[0]))
+            throw_unexpected_token_error("Invalid host in 'listen' directive: " + parts[0]);
+        if (!ParserDirectiveUtils::parse_port(parts[1], parsed_port))
+            throw_unexpected_token_error("Invalid port in 'listen' directive: " + parts[1]);
         server_config.host = parts[0];
         server_config.port = parts[1];
     }
@@ -40,6 +48,10 @@ void ConfigParserServer::parse_server_listen() {
 void ConfigParserServer::parse_server_names() {
     parser.validates_directive_value_for("server_name");
     while (parser.current_token.type == WORD) {
+        if (!ParserDirectiveUtils::is_valid_hostname(parser.current_token.value)) {
+            throw_unexpected_token_error(
+                "Invalid server name in 'server_name' directive: " + parser.current_token.value);
+        }
         server_config.server_names.push_back(parser.current_token.value);
         parser.advance();
     }
@@ -49,11 +61,10 @@ void ConfigParserServer::parse_server_names() {
 
 void ConfigParserServer::parse_client_max_body_size() {
     parser.validates_directive_value_for("client_max_body_size");
-    std::stringstream ss(parser.current_token.value);
-    size_t value;
-    if (!(ss >> value))
+    size_t parsed_value = 0;
+    if (!ParserDirectiveUtils::parse_body_size(parser.current_token.value, parsed_value))
         throw_unexpected_token_error("Invalid value for 'client_max_body_size' directive: " + parser.current_token.value);
-    server_config.client_max_body_size = value;
+    server_config.client_max_body_size = parsed_value;
     parser.validates_extra_arguments_in("client_max_body_size");
 }
 
@@ -64,18 +75,22 @@ void ConfigParserServer::parse_error_page() {
         parts.push_back(parser.current_token.value);
         parser.advance();
     }
-    std::string path = parts[parts.size() - 1];
-    if (path.empty())
-        throw_unexpected_token_error("error_page requires a non-empty path");
+    if (parser.current_token.type != SEMICOLON)
+        throw_unexpected_token_error("Unexpected token after 'error_page' directive value: " + parser.current_token.value);
     if (parts.size() < 2)
         throw_unexpected_token_error("error_page directive requires at least one status code and a path");
-    if (path[0] != '/' && path[0] != '@' && path.substr(0, 4) != "http")
+
+    std::string path = parts[parts.size() - 1];
+    if (!ParserDirectiveUtils::is_valid_error_page_path(path))
         throw_unexpected_token_error("error_page path must start with '/', '@', or 'http': " + path);
+
     for (size_t i = 0; i < parts.size() - 1; ++i) {
         std::stringstream ss(parts[i]);
-        int error_code;
-        if (!(ss >> error_code))
+        int error_code = 0;
+        if (!(ss >> error_code) || !ss.eof())
             throw_unexpected_token_error("Invalid error code: " + parts[i]);
+        if (!ParserDirectiveUtils::is_valid_error_status_code(error_code))
+            throw_unexpected_token_error("Unsupported error code in 'error_page': " + parts[i]);
         server_config.error_pages[error_code] = path;
     }
 }
@@ -101,6 +116,7 @@ ServerConfig ConfigParserServer::parse() {
             case SERVER_ERROR_PAGE: parse_error_page(); break;
             case SERVER_LOCATION: {
                 ConfigParserLocation location_parser(parser);
+                location_parser.inherit_error_pages_from_server(server_config.error_pages);
                 LocationConfig location_config = location_parser.parse();
                 server_config.locations.push_back(location_config);
                 continue;

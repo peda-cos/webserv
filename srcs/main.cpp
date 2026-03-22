@@ -50,6 +50,26 @@ void testConfigParser(std::string config_source) {
                 std::cout << location.limit_except[k] << (k < location.limit_except.size() - 1 ? ", " : "");
             }
             std::cout << std::endl;
+            std::cout << "      Upload Store: " << (location.upload_store.empty() ? "(none)" : location.upload_store) << std::endl;
+            std::cout << "      CGI Handlers:" << std::endl;
+            if (location.cgi_handlers.empty()) {
+                std::cout << "        (none)" << std::endl;
+            } else {
+                for (std::map<std::string, std::string>::const_iterator it = location.cgi_handlers.begin(); it != location.cgi_handlers.end(); ++it) {
+                    std::cout << "        " << it->first << " -> " << it->second << std::endl;
+                }
+            }
+            if (location.return_code != 0) {
+                std::cout << "      Return: " << location.return_code << " " << location.return_url << std::endl;
+            }
+            std::cout << "      Error Pages (inherited from server):" << std::endl;
+            if (location.error_pages.empty()) {
+                std::cout << "        (none)" << std::endl;
+            } else {
+                for (std::map<int, std::string>::const_iterator it = location.error_pages.begin(); it != location.error_pages.end(); ++it) {
+                    std::cout << "        " << it->first << " -> " << it->second << std::endl;
+                }
+            }
         }
     }
     std::cout << std::endl;
