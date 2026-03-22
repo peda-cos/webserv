@@ -51,6 +51,9 @@ ConfigToken ConfigLexer::get_next_token() {
     while (position < source_length && ParsingUtils::is_whitespace(source[position])) {
         advance();
     }
+    if (position >= source_length) {
+        return ConfigToken("", EOF_TOKEN, source_position);
+    }
     if (source[position] == '#') {
         skip_comment();
         return get_next_token();
@@ -72,6 +75,8 @@ std::vector<ConfigToken> ConfigLexer::tokenize() {
     std::vector<ConfigToken> tokens;
     while (position < source_length) {
         ConfigToken token = get_next_token();
+        if (token.type == EOF_TOKEN)
+            break;
         tokens.push_back(token);
     }
     if (position >= source_length) {

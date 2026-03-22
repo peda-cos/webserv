@@ -41,7 +41,19 @@ unit: $(UNIT_BINS)
 	@echo "=== Unit Tests Complete ==="
 
 $(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
+	$(CXX) $(CXXFLAGS) \
+		-I$(FRAMEWORK_DIR) -I../includes -I../includes/config -I../includes/utils \
+		-I../includes/http -I../includes/server -I../includes/cgi \
+		-o $@ $< \
+		../srcs/config/ConfigLexer.cpp \
+		../srcs/config/ConfigParser.cpp \
+		../srcs/config/ConfigParserServer.cpp \
+		../srcs/config/ConfigParserLocation.cpp \
+		../srcs/config/ParserSyntaxError.cpp \
+		../srcs/utils/ConfigUtils.cpp \
+		../srcs/utils/ParsingUtils.cpp \
+		../srcs/utils/Logger.cpp \
+		../srcs/utils/ParserDirectiveUtils.cpp
 
 $(UNIT_DIR)/test_http_request_parser: $(UNIT_DIR)/test_http_request_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<

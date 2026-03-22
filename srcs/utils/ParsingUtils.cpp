@@ -43,23 +43,24 @@ static ConfigDirectiveType get_directive(const std::string& word, const std::map
     return (it != directives_map.end()) ? it->second : UNKNOWN;
 }
 
-bool ParsingUtils::is_whitespace(char c) {
+namespace ParsingUtils {
+bool is_whitespace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-ConfigDirectiveType ParsingUtils::get_root_directive_type(const std::string& word) {
+ConfigDirectiveType get_root_directive_type(const std::string& word) {
     return get_directive(word, valid_root_directives);
 }
 
-ConfigDirectiveType ParsingUtils::get_server_directive_type(const std::string& word) {
+ConfigDirectiveType get_server_directive_type(const std::string& word) {
     return get_directive(word, valid_server_directives);
 }
 
-ConfigDirectiveType ParsingUtils::get_location_directive_type(const std::string& word) {
+ConfigDirectiveType get_location_directive_type(const std::string& word) {
     return get_directive(word, valid_location_directives);
 }
 
-std::vector<std::string> ParsingUtils::split(const std::string& str, char delimiter) {
+std::vector<std::string> split(const std::string& str, char delimiter) {
     std::vector<std::string> tokens;
     std::stringstream ss(str);
     std::string token;
@@ -70,3 +71,4 @@ std::vector<std::string> ParsingUtils::split(const std::string& str, char delimi
     
     return tokens;
 }
+    }

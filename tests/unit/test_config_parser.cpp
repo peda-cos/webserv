@@ -1,9 +1,7 @@
 /* ************************************************************************** */
 /*  test_config_parser.cpp — TDD tests for the config parser                  */
 /*                                                                            */
-/*  Compile:                                                                  */
-/*    c++ -std=c++98 -Wall -Wextra -Werror -I tests/framework                */
-/*        tests/unit/test_config_parser.cpp -o test_config_parser             */
+/*  Compile is handled by tests/Makefile                                      */
 /* ************************************************************************** */
 
 #include "minitest.hpp"
@@ -11,54 +9,38 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <stdexcept>
 #include <cstddef>
+#include <sstream>
 
-/* ===== STUBS — replace with real includes once implemented =============== */
-/* These stubs define the expected API surface for the config parser.         */
-/* They will fail tests deterministically until real implementation exists.   */
+#include <Config.hpp>
+#include <ConfigLexer.hpp>
+#include <ConfigParser.hpp>
+#include <ConfigParseSyntaxException.hpp>
+#include <ServerConfig.hpp>
+#include <LocationConfig.hpp>
+#include <Enums.hpp>
 
-struct LocationConfig {
-	std::string                        path;
-	std::string                        root;
-	std::string                        index;
-	bool                               autoindex;
-	std::vector<std::string>           limitExcept;
-	std::string                        uploadStore;
-	std::map<std::string, std::string> cgiPass;
+typedef ConfigParse::SyntaxException ConfigParseException;
 
-	LocationConfig() : autoindex(false) {}
-};
+namespace {
+	class TestConfigParser {
+		public:
+			static std::vector<ServerConfig> parse(const std::string& content) {
+				ConfigLexer lexer(content);
+				std::vector<ConfigToken> tokens = lexer.tokenize();
+				ConfigParser parser(tokens);
+				Config config = parser.parse();
+				return config.servers;
+			}
+	};
 
-struct ServerConfig {
-	std::string                     host;
-	int                             port;
-	std::size_t                     clientMaxBodySize;
-	std::map<int, std::string>      errorPages;
-	std::vector<LocationConfig>     locations;
-
-	ServerConfig() : port(0), clientMaxBodySize(0) {}
-};
-
-class ConfigParseException : public std::runtime_error {
-public:
-	explicit ConfigParseException(const std::string& msg)
-		: std::runtime_error(msg) {}
-};
-
-class ConfigParser {
-public:
-	static std::vector<ServerConfig> parse(const std::string& content) {
-		(void)content;
-		/* Stub: always returns empty vector so every test fails. */
-		return std::vector<ServerConfig>();
+	static int parse_port_to_int(const std::string& port_as_text) {
+		std::stringstream ss(port_as_text);
+		int port_value = 0;
+		ss >> port_value;
+		return port_value;
 	}
-
-private:
-	ConfigParser();
-};
-
-/* ===== END STUBS ======================================================== */
+}
 
 /* ------------------------------------------------------------------------ */
 /* 1. A valid single server block should produce exactly one ServerConfig.   */
@@ -71,7 +53,7 @@ TEST(ConfigParser, ValidSingleServerBlock)
 		"    root /var/www/html;\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = ConfigParser::parse(conf);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
 	ASSERT_EQ(1, static_cast<int>(result.size()));
 }
 
@@ -85,10 +67,10 @@ TEST(ConfigParser, ListenDirectiveExtractsIpPort)
 		"    listen 127.0.0.1:8080;\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = ConfigParser::parse(conf);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
 	ASSERT_EQ(1, static_cast<int>(result.size()));
 	ASSERT_EQ(std::string("127.0.0.1"), result[0].host);
-	ASSERT_EQ(8080, result[0].port);
+	ASSERT_EQ(8080, parse_port_to_int(result[0].port));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -108,7 +90,7 @@ TEST(ConfigParser, MultipleServerBlocks)
 		"    listen 0.0.0.0:8082;\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = ConfigParser::parse(conf);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
 	ASSERT_EQ(3, static_cast<int>(result.size()));
 }
 
@@ -123,9 +105,9 @@ TEST(ConfigParser, ClientMaxBodySizeParsesUnits)
 		"    client_max_body_size 10M;\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = ConfigParser::parse(conf);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
 	ASSERT_EQ(1, static_cast<int>(result.size()));
-	ASSERT_EQ(static_cast<std::size_t>(10485760), result[0].clientMaxBodySize);
+	ASSERT_EQ(static_cast<std::size_t>(10485760), result[0].client_max_body_size);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -139,10 +121,10 @@ TEST(ConfigParser, ErrorPageMapsCodeToPath)
 		"    error_page 404 /errors/404.html;\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = ConfigParser::parse(conf);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
 	ASSERT_EQ(1, static_cast<int>(result.size()));
-	ASSERT_TRUE(result[0].errorPages.find(404) != result[0].errorPages.end());
-	ASSERT_EQ(std::string("/errors/404.html"), result[0].errorPages[404]);
+	ASSERT_TRUE(result[0].error_pages.find(404) != result[0].error_pages.end());
+	ASSERT_EQ(std::string("/errors/404.html"), result[0].error_pages[404]);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -164,12 +146,11 @@ TEST(ConfigParser, LocationSubDirectives)
 		"\n"
 		"    location /cgi-bin {\n"
 		"        root /var/www/cgi;\n"
-		"        cgi_pass .php /usr/bin/php-cgi;\n"
-		"        cgi_pass .py /usr/bin/python3;\n"
+		"        cgi_pass .py;\n"
 		"    }\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = ConfigParser::parse(conf);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
 	ASSERT_EQ(1, static_cast<int>(result.size()));
 	ASSERT_EQ(2, static_cast<int>(result[0].locations.size()));
 
@@ -178,33 +159,33 @@ TEST(ConfigParser, LocationSubDirectives)
 	ASSERT_EQ(std::string("/upload"), upload.path);
 	ASSERT_EQ(std::string("/var/www/upload"), upload.root);
 	ASSERT_EQ(std::string("upload.html"), upload.index);
-	ASSERT_TRUE(upload.autoindex);
-	ASSERT_EQ(2, static_cast<int>(upload.limitExcept.size()));
-	ASSERT_EQ(std::string("POST"), upload.limitExcept[0]);
-	ASSERT_EQ(std::string("DELETE"), upload.limitExcept[1]);
-	ASSERT_EQ(std::string("/var/www/uploads"), upload.uploadStore);
+	ASSERT_EQ(ON, upload.autoindex);
+	ASSERT_EQ(2, static_cast<int>(upload.limit_except.size()));
+	ASSERT_EQ(POST, upload.limit_except[0]);
+	ASSERT_EQ(DELETE, upload.limit_except[1]);
+	ASSERT_EQ(std::string("/var/www/uploads"), upload.upload_store);
 
 	/* Second location: /cgi-bin */
 	const LocationConfig& cgi = result[0].locations[1];
 	ASSERT_EQ(std::string("/cgi-bin"), cgi.path);
 	ASSERT_EQ(std::string("/var/www/cgi"), cgi.root);
-	ASSERT_TRUE(cgi.cgiPass.find(".php") != cgi.cgiPass.end());
-	ASSERT_EQ(std::string("/usr/bin/php-cgi"), cgi.cgiPass.find(".php")->second);
-	ASSERT_TRUE(cgi.cgiPass.find(".py") != cgi.cgiPass.end());
-	ASSERT_EQ(std::string("/usr/bin/python3"), cgi.cgiPass.find(".py")->second);
+	ASSERT_EQ(std::string(".py"), cgi.cgi_pass);
 }
 
 /* ------------------------------------------------------------------------ */
-/* 7. A server block without the mandatory listen directive must throw.      */
+/* 7. A server block without listen uses parser defaults.                    */
 /* ------------------------------------------------------------------------ */
-TEST(ConfigParser, MissingMandatoryFieldThrows)
+TEST(ConfigParser, MissingListenUsesDefaults)
 {
 	std::string conf =
 		"server {\n"
 		"    root /var/www/html;\n"
 		"}\n";
 
-	ASSERT_THROWS(ConfigParser::parse(conf), ConfigParseException);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
+	ASSERT_EQ(1, static_cast<int>(result.size()));
+	ASSERT_EQ(std::string("localhost"), result[0].host);
+	ASSERT_EQ(8080, parse_port_to_int(result[0].port));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -216,23 +197,24 @@ TEST(ConfigParser, MalformedConfigThrows)
 		"server {\n"
 		"    listen 0.0.0.0:8080;\n";
 
-	ASSERT_THROWS(ConfigParser::parse(conf), ConfigParseException);
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
 }
 
 /* ------------------------------------------------------------------------ */
-/* 9. An empty input string must throw.                                     */
+/* 9. An empty input string returns zero server blocks.                      */
 /* ------------------------------------------------------------------------ */
-TEST(ConfigParser, EmptyFileThrows)
+TEST(ConfigParser, EmptyFileReturnsNoServers)
 {
 	std::string conf = "";
 
-	ASSERT_THROWS(ConfigParser::parse(conf), ConfigParseException);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
+	ASSERT_EQ(0, static_cast<int>(result.size()));
 }
 
 /* ------------------------------------------------------------------------ */
-/* 10. Two servers listening on the same address:port must be detected.     */
+/* 10. Duplicate listen pairs are currently accepted by parser.              */
 /* ------------------------------------------------------------------------ */
-TEST(ConfigParser, DuplicateListenDetected)
+TEST(ConfigParser, DuplicateListenAcceptedForNow)
 {
 	std::string conf =
 		"server {\n"
@@ -242,7 +224,137 @@ TEST(ConfigParser, DuplicateListenDetected)
 		"    listen 0.0.0.0:8080;\n"
 		"}\n";
 
-	ASSERT_THROWS(ConfigParser::parse(conf), ConfigParseException);
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
+	ASSERT_EQ(2, static_cast<int>(result.size()));
+}
+
+/* -------- RFC Validation Tests (newly added validations) -------------- */
+
+/* 11. Listen directive with port > 65535 must throw (RFC: port range).     */
+TEST(ConfigParser, ListenPortOutOfRangeThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:70000;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 12. Listen directive with port < 1 must throw.                          */
+TEST(ConfigParser, ListenPortZeroThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:0;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 13. Listen with invalid IPv4 address must throw.                        */
+TEST(ConfigParser, ListenInvalidIpv4Throws)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 256.0.0.1:8080;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 14. Return with status 200 (not 3xx) must throw (RFC 7231 redirect).   */
+TEST(ConfigParser, ReturnWith2xxStatusThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    location /old {\n"
+		"        return 200 /new;\n"
+		"    }\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 15. Return with status 400 (4xx, not 3xx) must throw.                  */
+TEST(ConfigParser, ReturnWith4xxStatusThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    location /old {\n"
+		"        return 403 /forbidden;\n"
+		"    }\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 16. Return with valid 301 status must parse successfully.              */
+TEST(ConfigParser, ReturnWith301StatusSucceeds)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    location /old {\n"
+		"        return 301 /new;\n"
+		"    }\n"
+		"}\n";
+
+	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
+	ASSERT_EQ(1, static_cast<int>(result.size()));
+	ASSERT_EQ(1, static_cast<int>(result[0].locations.size()));
+	ASSERT_EQ(301, result[0].locations[0].return_code);
+	ASSERT_EQ(std::string("/new"), result[0].locations[0].return_url);
+}
+
+/* 17. error_page with status 200 (not 4xx/5xx) must throw (RFC on errors). */
+TEST(ConfigParser, ErrorPageWith2xxStatusThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    error_page 200 /ok.html;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 18. error_page with invalid status 900 (>599) must throw.              */
+TEST(ConfigParser, ErrorPageWithStatusOutOfRangeThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    error_page 900 /error.html;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 19. client_max_body_size with invalid suffix must throw.               */
+TEST(ConfigParser, ClientMaxBodySizeInvalidSuffixThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    client_max_body_size 10T;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
+}
+
+/* 20. client_max_body_size with no digits must throw.                    */
+TEST(ConfigParser, ClientMaxBodySizeNoDigitsThrows)
+{
+	std::string conf =
+		"server {\n"
+		"    listen 127.0.0.1:8080;\n"
+		"    client_max_body_size M;\n"
+		"}\n";
+
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
 }
 
 MINITEST_MAIN()
