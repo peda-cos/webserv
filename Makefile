@@ -9,12 +9,22 @@ INCLUDES = $(addprefix -I , $(shell find includes -type d))
 FLAGS = $(VERSION) $(SYNTAX) $(DEPS_HEADERS) $(INCLUDES)
 
 LEXER_SRCS = srcs/config/ConfigLexer.cpp
-UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp srcs/utils/Logger.cpp
+UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp \
+	srcs/utils/Logger.cpp srcs/utils/CgiUtils.cpp srcs/utils/HttpUtils.cpp \
+	srcs/utils/StringUtils.cpp srcs/utils/ParserDirectiveUtils.cpp
+
 PARSER_SRCS = srcs/config/ConfigParser.cpp srcs/config/ParserSyntaxError.cpp \
-	srcs/config/ConfigParserServer.cpp srcs/config/ConfigParserLocation.cpp
+	srcs/config/ConfigParserServer.cpp srcs/config/ConfigParserLocation.cpp \
+
 SERVER_SRCS = srcs/server/Server.cpp	
 
-SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS) $(SERVER_SRCS)
+HTTP_SRCS = srcs/http/HttpRequest.cpp srcs/http/HttpResponse.cpp
+
+CGI_SRCS = srcs/cgi/CgiExecutor.cpp srcs/cgi/CgiEnvBuilder.cpp srcs/cgi/CgiPipeManager.cpp
+
+EXAMPLES = srcs/examples.cpp # TODO: Remover na entrega final, apenas para testar funcionalidades
+
+SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS) $(HTTP_SRCS) $(CGI_SRCS) $(EXAMPLES) $(SERVER_SRCS)
 
 OBJS = $(SRCS:srcs/%.cpp=objs/%.o)
 DEPS = $(OBJS:.o=.d)

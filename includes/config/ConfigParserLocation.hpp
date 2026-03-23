@@ -19,10 +19,12 @@ class ConfigParserLocation {
         void parse_location_upload_store();
         void parse_location_cgi_pass();
         void parse_location_redirect();
+        void parse_location_error_page();
         void throw_unexpected_token_error(const std::string& message);
     public:
         ConfigParserLocation(ConfigParser &parser);
         LocationConfig parse();
+        void inherit_error_pages_from_server(const std::map<int, std::string>& server_error_pages);
 };
 
 #endif
