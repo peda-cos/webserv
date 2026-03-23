@@ -12,7 +12,7 @@
 
 #include <cstring>
 #include <sstream>
-#include <iostream>       // usando para debug retirar dps
+#include <iostream>
 
 
 Server::Server(const Config& config) : _config(config) {
@@ -181,7 +181,8 @@ void Server::_accept_new_connection(int listening_fd) {
         return;
     }
 
-    _connections[client_fd] = Connection(client_fd);
+    const ServerConfig* srv_cfg = _fd_to_server_config[listening_fd];
+    _connections[client_fd] = Connection(client_fd, srv_cfg);
 
     _register_fd(client_fd, POLLIN);
 

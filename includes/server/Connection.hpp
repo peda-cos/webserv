@@ -3,14 +3,16 @@
 
 #include <string>
 
-struct Connection {
-    int fd;
-    std::string read_buffer;
-    std::string write_buffer;
+struct ServerConfig;
 
-    Connection() : fd(-1) {}
-    explicit Connection(int fd) : fd(fd) {}
-    //sem destrutor p/ o close(fd) pois ele será gerenciado pela classe server 
+struct Connection {
+    int                  fd;
+    std::string          read_buffer;
+    std::string          write_buffer;
+    const ServerConfig*  server_config;  // config do bloco server{} que aceitou esta conexão
+
+    Connection() : fd(-1), server_config(NULL) {}
+    Connection(int fd, const ServerConfig* cfg) : fd(fd), server_config(cfg) {}
 };
 
 #endif
