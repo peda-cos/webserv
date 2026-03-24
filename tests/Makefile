@@ -18,7 +18,8 @@ UNIT_SRCS = \
 	$(UNIT_DIR)/test_method_handlers.cpp \
 	$(UNIT_DIR)/test_cgi_env.cpp \
 	$(UNIT_DIR)/test_cgi_executor.cpp \
-	$(UNIT_DIR)/test_chunked_decoder.cpp
+	$(UNIT_DIR)/test_chunked_decoder.cpp \
+	$(UNIT_DIR)/test_connection_loop.cpp
 
 UNIT_BINS = $(UNIT_SRCS:.cpp=)
 
@@ -113,3 +114,21 @@ clean:
 	rm -f $(UNIT_BINS)
 
 .PHONY: all static unit integration conformance stress bonus clean
+
+$(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWORK_DIR)/minitest.hpp
+	$(CXX) $(CXXFLAGS) \
+		-I$(FRAMEWORK_DIR) -I../includes -I../includes/config -I../includes/utils \
+		-I../includes/http -I../includes/server -I../includes/cgi \
+		-o $@ $< \
+		../srcs/server/Server.cpp \
+		../srcs/utils/Logger.cpp \
+		../srcs/config/ConfigLexer.cpp \
+		../srcs/config/ConfigParser.cpp \
+		../srcs/config/ConfigParserServer.cpp \
+		../srcs/config/ConfigParserLocation.cpp \
+		../srcs/config/ParserSyntaxError.cpp \
+		../srcs/utils/ConfigUtils.cpp \
+		../srcs/utils/HttpUtils.cpp \
+		../srcs/utils/StringUtils.cpp \
+		../srcs/utils/ParserDirectiveUtils.cpp \
+		../srcs/utils/ParsingUtils.cpp
