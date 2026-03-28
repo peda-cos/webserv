@@ -18,8 +18,8 @@ import subprocess
 import unittest
 
 # Path to the webserv binary (relative to tests/ directory)
-WEBSERV_BIN = os.path.join(os.path.dirname(__file__), "..", "webserv")
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+WEBSERV_BIN = os.path.join(os.path.dirname(__file__), "..", "..", "webserv")
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "fixtures")
 
 # How long to wait for the server to start accepting connections (seconds)
 SERVER_START_TIMEOUT = 5.0

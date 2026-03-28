@@ -5,8 +5,9 @@
 #include <ConfigUtils.hpp>
 #include <Logger.hpp>
 #include <iostream>
+#include <sstream>
+#include <Server.hpp> 
 
-void testConfigParser(std::string config_source);
 void testCGIExecutor();
 
 int main(int argc, char* argv[]) {
@@ -17,7 +18,24 @@ int main(int argc, char* argv[]) {
             Logger::error("Conf file is empty in path: " + path);
             return 1;
         }
-        // testConfigParser(config_source);
+        ConfigLexer lexer(config_source);
+        std::vector<ConfigToken> tokens = lexer.tokenize();
+
+        ConfigParser parser(tokens);
+        Config config = parser.parse();
+
+        if (config.servers.empty()) {
+            Logger::error("No server blocks found in: " + path);
+            return 1;
+        }
+
+        std::stringstream ss;
+        ss << config.servers.size();
+        Logger::info("Configuration loaded: " + path + " (" + ss.str() + " server(s))");
+
+        Server server(config);
+        server.run();
+
         testCGIExecutor();
     } catch(const std::exception& e) {
         Logger::error(e.what());
