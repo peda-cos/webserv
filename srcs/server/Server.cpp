@@ -14,9 +14,10 @@
 #include <sstream>
 #include <iostream>
 
+#define READ_BUFFER_SIZE 4096
+
 
 Server::Server(const Config& config) : _config(config) {
-    // ignorar SIGPIPE p/ evitar que o processo morra quando o cliente ps verificar a permanencia desta funcionalidade
     signal(SIGPIPE, SIG_IGN);
 }
 
@@ -90,7 +91,6 @@ int Server::_create_listening_socket(const ServerConfig& srv) {
         }
     }
 
-    // bind(): associa o socket ao endereço/porta -> reserva a porta no SO
     if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         Logger::error("bind() failed for port " + srv.port + " (port already in use?)");
         close(fd);
@@ -192,14 +192,8 @@ void Server::_accept_new_connection(int listening_fd) {
 // a sequência "\r\n\r\n" marca o fim dos headers em HTTP/1.1 
 // apos detectado montar uma resposta hardcoded AJUSTAR APOS +/- feature 03/04 que é o retorno do html
 void Server::_read_from_client(int fd) {
-    char buf[4096];
+    char buf[READ_BUFFER_SIZE];
 
-    // talvez seja melhor transformar em uma macro para facititar a leitura dps ver isso
-    // como O_NONBLOCK está ativo:
-    //   n > 0  dados lidos
-    //   n == 0 cliente fechou a conexão (FIN TCP)
-    //   n < 0, errno == EAGAIN,  sem dados agora (tentar depois)
-    //   n < 0, outro errno, erro real
     ssize_t n = recv(fd, buf, sizeof(buf), 0);
 
     if (n == 0) {
@@ -207,6 +201,9 @@ void Server::_read_from_client(int fd) {
         return;
     }
     if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return;
+        }
         _close_connection(fd);
         return;
     }
