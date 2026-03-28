@@ -14,7 +14,9 @@
 #include <sstream>
 #include <iostream>
 
-#define READ_BUFFER_SIZE 4096
+#define READ_BUFFER_SIZE        4096
+#define MAX_HEADER_BUFFER_SIZE  READ_BUFFER_SIZE
+#define CONNECTION_TIMEOUT_SEC  5
 
 
 Server::Server(const Config& config) : _config(config) {
@@ -128,11 +130,16 @@ void Server::run() {
         if (_poll_fds.empty())
             break;
 
-        int ready = poll(&_poll_fds[0], _poll_fds.size(), -1);
+        int ready = poll(&_poll_fds[0], _poll_fds.size(), CONNECTION_TIMEOUT_SEC * 1000);
 
         if (ready < 0) {
             Logger::error("poll() failed — stopping server");
             break;
+        }
+
+        if (ready == 0) {
+            _check_timeouts();
+            continue;
         }
 
         size_t current_size = _poll_fds.size();
@@ -155,6 +162,8 @@ void Server::run() {
                 }
             }
         }
+
+        _check_timeouts();
     }
 }
 
@@ -189,8 +198,8 @@ void Server::_accept_new_connection(int listening_fd) {
     Logger::info("New connection accepted");
 }
 
-// a sequência "\r\n\r\n" marca o fim dos headers em HTTP/1.1 
-// apos detectado montar uma resposta hardcoded AJUSTAR APOS +/- feature 03/04 que é o retorno do html
+// a sequência "\r\n\r\n" marca o fim dos headers em HTTP/1.1
+// AJUSTAR: integrar HttpRequestParser após feature 03/04
 void Server::_read_from_client(int fd) {
     char buf[READ_BUFFER_SIZE];
 
@@ -208,22 +217,31 @@ void Server::_read_from_client(int fd) {
         return;
     }
 
-    _connections[fd].read_buffer.append(buf, static_cast<size_t>(n));
+    Connection& conn = _connections[fd];
+    conn.last_activity = time(NULL);
+    conn.read_buffer.append(buf, static_cast<size_t>(n));
 
-    // verificar se os cabeçalhos HTTP chegaram completos
-    const std::string& rbuf = _connections[fd].read_buffer;
-    if (rbuf.find("\r\n\r\n") != std::string::npos) {
-        // é aqui que é pra ser trocado: vai pegar o parser do httprequestparser e parsear rbuf => processar e montar resposta real 
+    if (conn.read_buffer.find("\r\n\r\n") == std::string::npos &&
+        conn.read_buffer.size() >= MAX_HEADER_BUFFER_SIZE) {
+        Logger::info("Read buffer limit exceeded — closing connection");
+        _close_connection(fd);
+        return;
+    }
+
+    if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
+        conn.keep_alive = (conn.read_buffer.find("Connection: close") == std::string::npos);
+        const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+
+        // AJUSTAR: substituir por resposta real do HttpRequestParser + handlers (feature 03/04)
         const std::string response =
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/plain\r\n"
             "Content-Length: 18\r\n"
-            "Connection: close\r\n"
+            "Connection: " + conn_header + "\r\n"
             "\r\n"
             "Hello, World test!";
 
-        _connections[fd].write_buffer = response;
-
+        conn.write_buffer = response;
         _set_pollout(fd, true);
     }
 }
@@ -247,11 +265,17 @@ void Server::_write_to_client(int fd) {
 
     if (conn.write_buffer.empty()) {
         _set_pollout(fd, false);
-        _close_connection(fd);
+        if (conn.keep_alive) {
+            conn.read_buffer.clear();
+            conn.last_activity = time(NULL);
+        } else {
+            _close_connection(fd);
+        }
     }
 }
 
 void Server::_close_connection(int fd) {
+    shutdown(fd, SHUT_RDWR);
     close(fd);
     _connections.erase(fd);
 
@@ -269,10 +293,27 @@ void Server::_set_pollout(int fd, bool enable) {
     for (size_t i = 0; i < _poll_fds.size(); ++i) {
         if (_poll_fds[i].fd == fd) {
             if (enable)
-                _poll_fds[i].events |= POLLOUT;   // p/ add o bit POLLOUT
+                _poll_fds[i].events |= POLLOUT;
             else
-                _poll_fds[i].events &= ~POLLOUT;  // p/ remover
+                _poll_fds[i].events &= ~POLLOUT;
             return;
         }
+    }
+}
+
+void Server::_check_timeouts() {
+    time_t now = time(NULL);
+    std::vector<int> to_close;
+
+    for (std::map<int, Connection>::iterator it = _connections.begin();
+         it != _connections.end(); ++it) {
+        if (now - it->second.last_activity > CONNECTION_TIMEOUT_SEC) {
+            to_close.push_back(it->first);
+        }
+    }
+
+    for (size_t i = 0; i < to_close.size(); ++i) {
+        Logger::info("Closing idle connection (timeout)");
+        _close_connection(to_close[i]);
     }
 }
