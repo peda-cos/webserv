@@ -34,6 +34,7 @@ class Server {
         void _write_to_client(int fd);
         void _close_connection(int fd);
         void _set_pollout(int fd, bool enable);
+        void _check_timeouts();
 
 
 };
