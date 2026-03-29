@@ -16,9 +16,9 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
 {
     CgiPipeManager pipe;
 
-    std::string file_extension = request.uri_path.substr(request.uri_path.rfind('.'));
+    std::string file_extension = request.uri.substr(request.uri.rfind('.'));
     std::string cgi_interpreter = location_config.cgi_handlers[file_extension];
-    std::string cgi_script_path = location_config.root + request.uri_path;
+    std::string cgi_script_path = location_config.root + request.uri;
 
     if (cgi_interpreter.empty()) {
         throw CgiException("No CGI handler configured for extension: " + file_extension);
@@ -37,7 +37,7 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
         throw CgiException("Execve failed: " + std::string(strerror(errno)));
     }
     pipe.setup_parent_process();
-    std::string data = request.method == POST ? request.body : "";
+    std::string data = request.method == "POST" ? request.body : "";
     pipe.write_to_child(data);
 
     int status;

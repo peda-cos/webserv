@@ -58,7 +58,11 @@ $(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_D
 		../srcs/utils/ParserDirectiveUtils.cpp
 
 $(UNIT_DIR)/test_http_request_parser: $(UNIT_DIR)/test_http_request_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
+	$(CXX) $(CXXFLAGS) \
+		-I$(FRAMEWORK_DIR) -I../includes -I../includes/http \
+		-o $@ $< \
+		../srcs/http/HttpRequest.cpp \
+		../srcs/http/HttpRequestParser.cpp
 
 $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<

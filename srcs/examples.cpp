@@ -81,9 +81,9 @@ void testConfigParser(std::string config_source) {
 void testCGIExecutor() {
     HttpRequest http_request;
 
-    http_request.setMethod(POST)
-                .setUriPath("/cgi/script.py")
-                .setVersion("HTTP/1.1")
+    http_request.setMethod("POST")
+                .setUri("/cgi/script.py")
+                .setHttpVersion("1.1")
                 .addHeader("Host", "localhost")
                 .addHeader("User-Agent", "Mozilla/5.0")
                 .addHeader("Content-Type", "application/x-www-form-urlencoded")

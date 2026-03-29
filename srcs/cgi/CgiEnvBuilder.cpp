@@ -1,30 +1,22 @@
 #include <CgiEnvBuilder.hpp>
 #include <TypeDefs.hpp>
 #include <CgiUtils.hpp>
-#include <HttpUtils.hpp>
 #include <sstream>
 
 void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request) {
-    env_map["SERVER_PROTOCOL"] = request.version;
+    env_map["SERVER_PROTOCOL"] = "HTTP/" + request.httpVersion;
     env_map["SERVER_SOFTWARE"] = "Webserv/1.0"; // TODO: tornar dinâmico com base no nome do servidor e versão, como ?
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
-    env_map["SCRIPT_NAME"] = request.uri_path;
-    env_map["REQUEST_METHOD"] = HttpUtils::method_to_string(request.method);
-    env_map["REQUEST_URI"] = request.uri_path;
+    env_map["SCRIPT_NAME"] = request.uri;
+    env_map["REQUEST_METHOD"] = request.method;
+    env_map["REQUEST_URI"] = request.uri;
     env_map["PATH_INFO"] = "PENDENTE"; // TODO: Entender melhor essa variável e como preenchê-la corretamente
     env_map["REMOTE_ADDR"] = "PENDENTE"; // TODO: Obter o endereço IP do cliente a partir do socket de conexão
 }
 
 
-void CgiEnvBuilder::build_query_string_env(const StringMap& params) {
-    std::string query_string = "";
-    for (StringMapIterator it = params.begin(); it != params.end(); ++it) {
-        if (!query_string.empty()) {
-            query_string += "&";
-        }
-        query_string += it->first + "=" + it->second;
-    }
-    env_map["QUERY_STRING"] = query_string;
+void CgiEnvBuilder::build_query_string_env(const HttpRequest& request) {
+    env_map["QUERY_STRING"] = request.queryString;
 }
 
 void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
@@ -60,8 +52,8 @@ void CgiEnvBuilder::build_envp() {
 
 CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request) : envp(NULL) {
     build_fundamental_envs(request);
-    build_query_string_env(request.query_parameters);
-    if (request.method == POST) {
+    build_query_string_env(request);
+    if (request.method == "POST") {
         build_envs_for_post_request(request);
     }
     build_envp();

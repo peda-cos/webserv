@@ -11,67 +11,10 @@
 #include <string>
 #include <map>
 #include <cstddef>
+#include <sstream>
 
-/* ======================================================================== */
-/*  Stub structures — replace with real includes once production code exists */
-/* ======================================================================== */
-
-struct HttpRequest
-{
-	std::string                        method;
-	std::string                        uri;
-	std::string                        path;
-	std::string                        queryString;
-	std::string                        httpVersion;
-	std::map<std::string, std::string> headers;
-	std::string                        body;
-	int                                errorCode;
-
-	HttpRequest()
-		: method()
-		, uri()
-		, path()
-		, queryString()
-		, httpVersion()
-		, headers()
-		, body()
-		, errorCode(0)
-	{}
-};
-
-class HttpRequestParser
-{
-public:
-	HttpRequestParser()
-		: _maxBodySize(0)
-	{}
-
-	void feed(const std::string& /* data */)
-	{
-		/* stub: no-op */
-	}
-
-	bool isComplete() const
-	{
-		/* stub: always incomplete */
-		return false;
-	}
-
-	HttpRequest getRequest() const
-	{
-		/* stub: return default (empty) request */
-		return HttpRequest();
-	}
-
-	void setMaxBodySize(std::size_t size)
-	{
-		(void)size;
-		/* stub: no-op */
-	}
-
-private:
-	std::size_t _maxBodySize;
-};
+#include "HttpRequest.hpp"
+#include "HttpRequestParser.hpp"
 
 /* ======================================================================== */
 /*  Helper: build a std::string that may contain embedded \r\n              */

@@ -3,23 +3,27 @@
 
 #include <map>
 #include <string>
-#include <Enums.hpp>
 
 class HttpRequest {
     public:
-        std::string body;
-        HttpMethod method;
-        std::string version;
-        std::string uri_path;
+        std::string method;
+        std::string uri;
+        std::string path;
+        std::string queryString;
+        std::string httpVersion;
         std::map<std::string, std::string> headers;
-        std::map<std::string, std::string> query_parameters;
+        std::string body;
+        int errorCode;
 
+        HttpRequest();
         HttpRequest& setBody(std::string body);
-        HttpRequest& setMethod(HttpMethod method);
-        HttpRequest& setUriPath(std::string uri_path);
-        HttpRequest& setVersion(std::string version);
+        HttpRequest& setMethod(std::string method);
+        HttpRequest& setUri(std::string uri);
+        HttpRequest& setPath(std::string path);
+        HttpRequest& setQueryString(std::string queryString);
+        HttpRequest& setHttpVersion(std::string httpVersion);
         HttpRequest& addHeader(std::string key, std::string value);
-        HttpRequest& addQueryParameter(std::string key, std::string value);
+        void setErrorCode(int code);
 };
 
 #endif

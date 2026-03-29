@@ -2,7 +2,7 @@
 #define HTTP_UTILS_HPP
 
 #include <string>
-#include <HttpRequest.hpp>
+#include <Enums.hpp>
 
 class HttpUtils {
     public:
