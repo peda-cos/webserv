@@ -29,6 +29,13 @@ bool ChunkedDecoder::hasError() const {
     return _error;
 }
 
+std::string ChunkedDecoder::getRemainder() const {
+    if (_state == DONE) {
+        return _buffer;
+    }
+    return std::string();
+}
+
 std::size_t ChunkedDecoder::_parseHexSize(const std::string& hex) const {
     std::size_t size = 0;
 

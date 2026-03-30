@@ -75,6 +75,13 @@ public:
      */
     bool hasError() const;
 
+    /**
+     * Get any unconsumed data after the chunked body is complete.
+     *
+     * @return Trailing bytes after the chunked terminator, or empty string if not done
+     */
+    std::string getRemainder() const;
+
 private:
     DecoderState _state;
     std::string _buffer;           // Buffer for incomplete data

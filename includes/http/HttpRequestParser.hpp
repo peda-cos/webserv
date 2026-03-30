@@ -24,6 +24,9 @@ class HttpRequestParser {
         HttpRequest getRequest() const;
         void setMaxBodySize(std::size_t size);
 
+    public:
+        std::string getRemainder() const;
+
     private:
         std::string _buffer;
         ParserState _state;
@@ -32,10 +35,11 @@ class HttpRequestParser {
         std::size_t _contentLength;
         std::string _bodyBuffer;
         ChunkedDecoder _chunkedDecoder;
+        std::string _remainder;
 
         void _parseRequestLine();
         void _parseHeaders();
-        void _initiateBodyReading();
+        void _initiateBodyReading(const std::string& afterHeaders);
         void _parseContentLength();
 };
 
