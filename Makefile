@@ -18,7 +18,7 @@ PARSER_SRCS = srcs/config/ConfigParser.cpp srcs/config/ParserSyntaxError.cpp \
 
 SERVER_SRCS = srcs/server/Server.cpp	
 
-HTTP_SRCS = srcs/http/HttpRequest.cpp srcs/http/HttpResponse.cpp srcs/http/HttpRequestParser.cpp
+HTTP_SRCS = srcs/http/HttpRequest.cpp srcs/http/HttpResponse.cpp srcs/http/HttpRequestParser.cpp srcs/http/ChunkedDecoder.cpp
 
 CGI_SRCS = srcs/cgi/CgiExecutor.cpp srcs/cgi/CgiEnvBuilder.cpp srcs/cgi/CgiPipeManager.cpp
 

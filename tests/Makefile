@@ -62,7 +62,8 @@ $(UNIT_DIR)/test_http_request_parser: $(UNIT_DIR)/test_http_request_parser.cpp $
 		-I$(FRAMEWORK_DIR) -I../includes -I../includes/http \
 		-o $@ $< \
 		../srcs/http/HttpRequest.cpp \
-		../srcs/http/HttpRequestParser.cpp
+		../srcs/http/HttpRequestParser.cpp \
+		../srcs/http/ChunkedDecoder.cpp
 
 $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
@@ -83,7 +84,7 @@ $(UNIT_DIR)/test_cgi_executor: $(UNIT_DIR)/test_cgi_executor.cpp $(FRAMEWORK_DIR
 	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_EXECUTOR_SRCS)
 
 $(UNIT_DIR)/test_chunked_decoder: $(UNIT_DIR)/test_chunked_decoder.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
+	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -I../includes/http -o $@ $< ../srcs/http/ChunkedDecoder.cpp
 
 # --- Integration tests (requires ./webserv binary) ---
 integration:

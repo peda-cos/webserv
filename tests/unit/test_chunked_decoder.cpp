@@ -3,48 +3,15 @@
 /*                                                                            */
 /*  Compile:                                                                  */
 /*    c++ -std=c++98 -Wall -Wextra -Werror -I tests/framework                */
-/*        tests/unit/test_chunked_decoder.cpp -o test_chunked_decoder         */
+/*        -I includes tests/unit/test_chunked_decoder.cpp -o test_chunked_decoder */
 /* ************************************************************************** */
 
 #include "minitest.hpp"
 
+#include <ChunkedDecoder.hpp>
+
 #include <string>
 #include <stdexcept>
-
-/* ===== STUBS — replace with real includes once implemented =============== */
-/* These stubs define the expected API surface for the chunked decoder.       */
-/* They will fail tests deterministically until real implementation exists.   */
-
-class ChunkedDecodeException : public std::runtime_error {
-public:
-	explicit ChunkedDecodeException(const std::string& msg)
-		: std::runtime_error(msg) {}
-};
-
-class ChunkedDecoder {
-public:
-	void feed(const std::string& data) {
-		(void)data;
-		/* Stub: no-op */
-	}
-
-	bool isComplete() const {
-		/* Stub: always returns false */
-		return false;
-	}
-
-	std::string getBody() const {
-		/* Stub: always returns empty string */
-		return std::string();
-	}
-
-	bool hasError() const {
-		/* Stub: always returns false */
-		return false;
-	}
-};
-
-/* ===== END STUBS ======================================================== */
 
 /* ------------------------------------------------------------------------ */
 /* 1. A single chunk followed by the terminator must produce the correct    */

@@ -2,6 +2,7 @@
 #define HTTP_REQUEST_PARSER_HPP
 
 #include <string>
+#include <ChunkedDecoder.hpp>
 #include <HttpRequest.hpp>
 
 class HttpRequestParser {
@@ -10,6 +11,7 @@ class HttpRequestParser {
             REQUEST_LINE,
             HEADERS,
             BODY,
+            CHUNKED_BODY,
             COMPLETE,
             ERROR
         };
@@ -29,6 +31,7 @@ class HttpRequestParser {
         HttpRequest _request;
         std::size_t _contentLength;
         std::string _bodyBuffer;
+        ChunkedDecoder _chunkedDecoder;
 
         void _parseRequestLine();
         void _parseHeaders();

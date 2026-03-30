@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <map>
+#include <sstream>
 
 HttpRequestParser::HttpRequestParser()
     : _buffer()
@@ -45,6 +46,31 @@ void HttpRequestParser::feed(const std::string& data) {
         if (_bodyBuffer.size() >= _contentLength) {
             _request.setBody(_bodyBuffer.substr(0, _contentLength));
             _state = COMPLETE;
+        }
+    } else if (_state == CHUNKED_BODY) {
+        // Delegate to chunked decoder
+        try {
+            _chunkedDecoder.feed(data);
+
+            // Check max body size against accumulated body
+            if (_maxBodySize > 0 && _chunkedDecoder.getBody().size() > _maxBodySize) {
+                _request.setErrorCode(413);
+                _state = ERROR;
+                return;
+            }
+
+            // Check if complete
+            if (_chunkedDecoder.isComplete()) {
+                _request.setBody(_chunkedDecoder.getBody());
+                // Update content-length header for downstream handlers
+                std::ostringstream oss;
+                oss << _request.body.size();
+                _request.headers["content-length"] = oss.str();
+                _state = COMPLETE;
+            }
+        } catch (const ChunkedDecodeException&) {
+            _request.setErrorCode(400);
+            _state = ERROR;
         }
     }
 }
@@ -237,6 +263,44 @@ void HttpRequestParser::_parseHeaders() {
 }
 
 void HttpRequestParser::_initiateBodyReading() {
+    // Check for Transfer-Encoding: chunked first (RFC 2616 §4.4)
+    std::map<std::string, std::string>::iterator transferEncodingIt = _request.headers.find("transfer-encoding");
+    if (transferEncodingIt != _request.headers.end()) {
+        // Chunked encoding takes precedence
+        if (transferEncodingIt->second == "chunked") {
+            // Extract any body data already in the buffer after headers
+            std::size_t headerEnd = _buffer.find("\r\n\r\n");
+            if (headerEnd != std::string::npos) {
+                std::size_t bodyStart = headerEnd + 4; // Skip \r\n\r\n
+                if (bodyStart < _buffer.size()) {
+                    std::string initialChunkedData = _buffer.substr(bodyStart);
+                    _buffer.erase(bodyStart); // Remove body data from main buffer
+                    
+                    try {
+                        _chunkedDecoder.feed(initialChunkedData);
+                        
+                        // If we got the complete body in one go
+                        if (_chunkedDecoder.isComplete()) {
+                            _request.setBody(_chunkedDecoder.getBody());
+                            _request.headers["content-length"] = _request.body;
+                            std::ostringstream oss;
+                            oss << _request.body.size();
+                            _request.headers["content-length"] = oss.str();
+                            _state = COMPLETE;
+                            return;
+                        }
+                    } catch (const ChunkedDecodeException&) {
+                        _request.setErrorCode(400);
+                        _state = ERROR;
+                        return;
+                    }
+                }
+            }
+            _state = CHUNKED_BODY;
+            return;
+        }
+    }
+
     // Check for content-length header
     std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find("content-length");
     if (contentLengthIt == _request.headers.end()) {
