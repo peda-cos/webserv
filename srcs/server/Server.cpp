@@ -1,6 +1,6 @@
 #include <Server.hpp>
 #include <Logger.hpp>
-
+#include <HttpRequest.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -193,13 +193,13 @@ void Server::_accept_new_connection(int listening_fd) {
     const ServerConfig* srv_cfg = _fd_to_server_config[listening_fd];
     _connections[client_fd] = Connection(client_fd, srv_cfg);
 
+    _connections[client_fd].parser.setMaxBodySize(srv_cfg->client_max_body_size);
+
     _register_fd(client_fd, POLLIN);
 
     Logger::info("New connection accepted");
 }
 
-// a sequência "\r\n\r\n" marca o fim dos headers em HTTP/1.1
-// AJUSTAR: integrar HttpRequestParser após feature 03/04
 void Server::_read_from_client(int fd) {
     char buf[READ_BUFFER_SIZE];
 
@@ -219,31 +219,43 @@ void Server::_read_from_client(int fd) {
 
     Connection& conn = _connections[fd];
     conn.last_activity = time(NULL);
-    conn.read_buffer.append(buf, static_cast<size_t>(n));
+    std::string data(buf, static_cast<size_t>(n));
 
-    if (conn.read_buffer.find("\r\n\r\n") == std::string::npos &&
-        conn.read_buffer.size() >= MAX_HEADER_BUFFER_SIZE) {
-        Logger::info("Read buffer limit exceeded — closing connection");
-        _close_connection(fd);
+    conn.parser.feed(data);
+
+    if (!conn.parser.isComplete()) {
         return;
     }
 
-    if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
-        conn.keep_alive = (conn.read_buffer.find("Connection: close") == std::string::npos);
-        const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+    HttpRequest req = conn.parser.getRequest();
 
-        // AJUSTAR: substituir por resposta real do HttpRequestParser + handlers (feature 03/04)
-        const std::string response =
-            "HTTP/1.1 200 OK\r\n"
+    if (req.errorCode == 413) {
+        const std::string response413 =
+            "HTTP/1.1 413 Payload Too Large\r\n"
             "Content-Type: text/plain\r\n"
-            "Content-Length: 18\r\n"
-            "Connection: " + conn_header + "\r\n"
+            "Content-Length: 17\r\n"
+            "Connection: close\r\n"
             "\r\n"
-            "Hello, World test!";
-
-        conn.write_buffer = response;
+            "Payload Too Large";
+        conn.write_buffer = response413;
+        conn.keep_alive = false;
         _set_pollout(fd, true);
+        return;
     }
+
+    conn.keep_alive = (conn.read_buffer.find("Connection: close") == std::string::npos);
+    const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: 18\r\n"
+        "Connection: " + conn_header + "\r\n"
+        "\r\n"
+        "Hello, World test!";
+
+    conn.write_buffer = response;
+    _set_pollout(fd, true);
 }
 
 void Server::_write_to_client(int fd) {
