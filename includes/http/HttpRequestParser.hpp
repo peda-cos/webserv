@@ -21,6 +21,7 @@ class HttpRequestParser {
         HttpRequest _request;
 
         void _parseRequestLine();
+        void _parseHeaders();
 };
 
 #endif

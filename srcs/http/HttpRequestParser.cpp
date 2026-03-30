@@ -1,5 +1,7 @@
 #include <HttpRequestParser.hpp>
 #include <algorithm>
+#include <cctype>
+#include <map>
 
 HttpRequestParser::HttpRequestParser()
     : _buffer()
@@ -22,6 +24,9 @@ void HttpRequestParser::feed(const std::string& data) {
     if (endPos != std::string::npos) {
         _complete = true;
         _parseRequestLine();
+        if (_request.errorCode == 0) {
+            _parseHeaders();
+        }
     }
 }
 
@@ -111,4 +116,93 @@ void HttpRequestParser::_parseRequestLine() {
     _request.setUri(uri);
     _request.setHttpVersion(httpVersion);
     _request.setErrorCode(0);
+}
+
+void HttpRequestParser::_parseHeaders() {
+    // Skip request line - find first \r\n
+    std::size_t pos = _buffer.find("\r\n");
+    if (pos == std::string::npos) {
+        _request.setErrorCode(400);
+        return;
+    }
+    pos += 2; // Move past \r\n
+
+    // Find end of headers marker
+    std::size_t endPos = _buffer.find("\r\n\r\n", pos);
+    if (endPos == std::string::npos) {
+        _request.setErrorCode(400);
+        return;
+    }
+
+    // Parse each header line
+    while (pos < endPos) {
+        // Find end of this header line
+        std::size_t lineEnd = _buffer.find("\r\n", pos);
+        if (lineEnd == std::string::npos || lineEnd > endPos) {
+            break;
+        }
+
+        // Extract the header line
+        std::string headerLine = _buffer.substr(pos, lineEnd - pos);
+
+        // Find the colon separator
+        std::size_t colonPos = headerLine.find(':');
+        if (colonPos == std::string::npos) {
+            // No colon - malformed header
+            _request.setErrorCode(400);
+            return;
+        }
+
+        if (colonPos == 0) {
+            // Empty field name
+            _request.setErrorCode(400);
+            return;
+        }
+
+        // Extract field name and convert to lowercase
+        std::string fieldName = headerLine.substr(0, colonPos);
+        for (std::size_t i = 0; i < fieldName.length(); ++i) {
+            fieldName[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(fieldName[i])));
+        }
+
+        // Extract field value (after colon) and trim whitespace
+        std::string fieldValue;
+        if (colonPos + 1 < headerLine.length()) {
+            fieldValue = headerLine.substr(colonPos + 1);
+
+            // Trim leading whitespace (SP and HTAB)
+            std::size_t valueStart = 0;
+            while (valueStart < fieldValue.length() &&
+                   (fieldValue[valueStart] == ' ' || fieldValue[valueStart] == '\t')) {
+                ++valueStart;
+            }
+
+            // Trim trailing whitespace (SP and HTAB)
+            std::size_t valueEnd = fieldValue.length();
+            while (valueEnd > valueStart &&
+                   (fieldValue[valueEnd - 1] == ' ' || fieldValue[valueEnd - 1] == '\t')) {
+                --valueEnd;
+            }
+
+            fieldValue = fieldValue.substr(valueStart, valueEnd - valueStart);
+        }
+
+        // Handle duplicate headers: concatenate with ", "
+        std::map<std::string, std::string>::iterator existing = _request.headers.find(fieldName);
+        if (existing != _request.headers.end()) {
+            existing->second += ", " + fieldValue;
+        } else {
+            _request.addHeader(fieldName, fieldValue);
+        }
+
+        // Move to next header line
+        pos = lineEnd + 2; // Move past \r\n
+    }
+
+    // Validate Host header for HTTP/1.1
+    if (_request.httpVersion == "1.1") {
+        if (_request.headers.find("host") == _request.headers.end()) {
+            _request.setErrorCode(400);
+        }
+    }
 }
