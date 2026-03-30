@@ -269,6 +269,95 @@ TEST(HttpRequestParser, ChunkedBodyWithinMaxInSingleBufferAccepted)
 	ASSERT_EQ(S("Hello World!"), req.body);
 }
 
+/* 14. Headers split across two feed() calls -------------------------------- */
+TEST(HttpRequestParser, HeadersSplitAcrossTwoFeeds)
+{
+	HttpRequestParser parser;
+
+	// First feed: partial headers (no \r\n\r\n yet)
+	parser.feed(S("GET / HTTP/1.1\r\n"
+	              "Host: local"));
+
+	// Should be incomplete after first feed
+	ASSERT_FALSE(parser.isComplete());
+	HttpRequest req1 = parser.getRequest();
+	ASSERT_EQ(0, req1.errorCode);
+
+	// Second feed: complete the headers
+	parser.feed(S("host\r\n"
+	              "\r\n"));
+
+	// Should be complete now
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req2 = parser.getRequest();
+	ASSERT_EQ(0, req2.errorCode);
+	ASSERT_EQ(S("GET"), req2.method);
+	ASSERT_EQ(S("/"), req2.uri);
+	ASSERT_EQ(S("1.1"), req2.httpVersion);
+}
+
+/* 15. Content-Length body arriving in two separate feed() calls ------------ */
+TEST(HttpRequestParser, ContentLengthBodySplitAcrossTwoFeeds)
+{
+	HttpRequestParser parser;
+
+	// First feed: headers + partial body
+	parser.feed(S("POST /submit HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Content-Length: 10\r\n"
+	              "\r\n"
+	              "Hello"));
+
+	// Should be incomplete - only 5 of 10 body bytes received
+	ASSERT_FALSE(parser.isComplete());
+	HttpRequest req1 = parser.getRequest();
+	ASSERT_EQ(0, req1.errorCode);
+
+	// Second feed: remaining body bytes
+	parser.feed(S("World"));
+
+	// Should be complete now
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req2 = parser.getRequest();
+	ASSERT_EQ(0, req2.errorCode);
+	ASSERT_EQ(S("POST"), req2.method);
+	ASSERT_EQ(S("/submit"), req2.uri);
+	// Body should NOT be duplicated - should be exactly "HelloWorld"
+	ASSERT_EQ(S("HelloWorld"), req2.body);
+}
+
+/* 16. Chunked body split across multiple feed() calls ---------------------- */
+TEST(HttpRequestParser, ChunkedBodySplitAcrossMultipleFeeds)
+{
+	HttpRequestParser parser;
+
+	// First feed: headers + first chunk size + partial data
+	parser.feed(S("POST /data HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Transfer-Encoding: chunked\r\n"
+	              "\r\n"
+	              "7\r\n"
+	              "Moz"));
+
+	// Should be incomplete - chunked body not complete
+	ASSERT_FALSE(parser.isComplete());
+
+	// Second feed: rest of first chunk + second chunk + terminator
+	parser.feed(S("illa\r\n"
+	              "9\r\n"
+	              "Developer\r\n"
+	              "0\r\n"
+	              "\r\n"));
+
+	// Should be complete now
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(0, req.errorCode);
+	ASSERT_EQ(S("POST"), req.method);
+	ASSERT_EQ(S("/data"), req.uri);
+	ASSERT_EQ(S("MozillaDeveloper"), req.body);
+}
+
 /* ======================================================================== */
 /*  Runner                                                                   */
 /* ======================================================================== */

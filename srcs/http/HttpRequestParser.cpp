@@ -20,7 +20,10 @@ void HttpRequestParser::feed(const std::string& data) {
         return;
     }
 
-    _buffer += data;
+    // Only append to _buffer during header parsing phase
+    if (_state == REQUEST_LINE || _state == HEADERS) {
+        _buffer += data;
+    }
 
     // Process based on current state
     if (_state == REQUEST_LINE || _state == HEADERS) {
@@ -33,6 +36,11 @@ void HttpRequestParser::feed(const std::string& data) {
                 _parseHeaders();
                 if (_request.errorCode == 0) {
                     _initiateBodyReading();
+                    // Clear _buffer after successful header parsing to prevent
+                    // body duplication on subsequent feed() calls
+                    if (_state != ERROR) {
+                        _buffer.clear();
+                    }
                 } else {
                     _state = ERROR;
                 }
