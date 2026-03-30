@@ -65,30 +65,31 @@ std::size_t ChunkedDecoder::_parseHexSize(const std::string& hex) const {
 }
 
 void ChunkedDecoder::_processBuffer() {
-    bool progress = true;
-
-    while (progress && !_error && _state != DONE && !_buffer.empty()) {
-        progress = false;
+    while (!_error && _state != DONE && !_buffer.empty()) {
+        std::size_t bufSizeBefore = _buffer.size();
+        DecoderState stateBefore = _state;
 
         switch (_state) {
             case READING_SIZE:
                 _processReadingSize();
-                progress = true; // Always make progress in state machine loop
                 break;
 
             case READING_DATA:
                 _processReadingData();
-                progress = true;
                 break;
 
             case READING_TRAILER_CRLF:
                 _processReadingTrailerCrlf();
-                progress = true;
                 break;
 
             case DONE:
-                progress = false;
-                break;
+                return;
+        }
+
+        // If no progress was made (buffer unchanged and state unchanged),
+        // stop to avoid infinite loop — wait for more data
+        if (_buffer.size() == bufSizeBefore && _state == stateBefore) {
+            break;
         }
     }
 }

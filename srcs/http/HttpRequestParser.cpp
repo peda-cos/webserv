@@ -205,15 +205,22 @@ void HttpRequestParser::_parseHeaders() {
     }
     pos += 2; // Move past \r\n
 
-    // Find end of headers marker
-    std::size_t endPos = _buffer.find("\r\n\r\n", pos);
+    // Find end of headers marker from the start of the buffer
+    // (not from pos, because the \r\n\r\n includes the last \r\n
+    // of the request line when there are zero headers)
+    std::size_t endPos = _buffer.find("\r\n\r\n");
     if (endPos == std::string::npos) {
         _request.setErrorCode(400);
         return;
     }
+    // Adjust endPos to mark the end of the header section:
+    // headers run from pos to endPos + 2 (the first \r\n of \r\n\r\n
+    // is the end of the last header line, or part of the request line
+    // end if there are no headers)
+    std::size_t headerEnd = endPos + 2;
 
     // Parse each header line
-    while (pos < endPos) {
+    while (pos < headerEnd) {
         // Find end of this header line
         std::size_t lineEnd = _buffer.find("\r\n", pos);
         if (lineEnd == std::string::npos || lineEnd > endPos) {
@@ -305,7 +312,7 @@ void HttpRequestParser::_initiateBodyReading(const std::string& afterHeaders) {
                             return;
                         }
                         _request.setBody(_chunkedDecoder.getBody());
-                        _request.headers["content-length"] = _request.body;
+                        // Update content-length header for downstream handlers
                         std::ostringstream oss;
                         oss << _request.body.size();
                         _request.headers["content-length"] = oss.str();
