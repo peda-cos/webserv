@@ -6,6 +6,14 @@
 
 class HttpRequestParser {
     public:
+        enum ParserState {
+            REQUEST_LINE,
+            HEADERS,
+            BODY,
+            COMPLETE,
+            ERROR
+        };
+
         HttpRequestParser();
         ~HttpRequestParser();
 
@@ -16,12 +24,16 @@ class HttpRequestParser {
 
     private:
         std::string _buffer;
-        bool _complete;
+        ParserState _state;
         std::size_t _maxBodySize;
         HttpRequest _request;
+        std::size_t _contentLength;
+        std::string _bodyBuffer;
 
         void _parseRequestLine();
         void _parseHeaders();
+        void _initiateBodyReading();
+        void _parseContentLength();
 };
 
 #endif

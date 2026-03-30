@@ -5,33 +5,52 @@
 
 HttpRequestParser::HttpRequestParser()
     : _buffer()
-    , _complete(false)
+    , _state(REQUEST_LINE)
     , _maxBodySize(0)
     , _request()
+    , _contentLength(0)
+    , _bodyBuffer()
 {}
 
 HttpRequestParser::~HttpRequestParser() {}
 
 void HttpRequestParser::feed(const std::string& data) {
-    if (_complete) {
+    if (_state == COMPLETE || _state == ERROR) {
         return;
     }
 
     _buffer += data;
 
-    // Check for end of headers marker \r\n\r\n
-    std::size_t endPos = _buffer.find("\r\n\r\n");
-    if (endPos != std::string::npos) {
-        _complete = true;
-        _parseRequestLine();
-        if (_request.errorCode == 0) {
-            _parseHeaders();
+    // Process based on current state
+    if (_state == REQUEST_LINE || _state == HEADERS) {
+        // Check for end of headers marker \r\n\r\n
+        std::size_t endPos = _buffer.find("\r\n\r\n");
+        if (endPos != std::string::npos) {
+            _state = HEADERS;
+            _parseRequestLine();
+            if (_request.errorCode == 0) {
+                _parseHeaders();
+                if (_request.errorCode == 0) {
+                    _initiateBodyReading();
+                } else {
+                    _state = ERROR;
+                }
+            } else {
+                _state = ERROR;
+            }
+        }
+    } else if (_state == BODY) {
+        // Accumulate body data
+        _bodyBuffer += data;
+        if (_bodyBuffer.size() >= _contentLength) {
+            _request.setBody(_bodyBuffer.substr(0, _contentLength));
+            _state = COMPLETE;
         }
     }
 }
 
 bool HttpRequestParser::isComplete() const {
-    return _complete;
+    return _state == COMPLETE || _state == ERROR;
 }
 
 HttpRequest HttpRequestParser::getRequest() const {
@@ -214,5 +233,88 @@ void HttpRequestParser::_parseHeaders() {
         if (_request.headers.find("host") == _request.headers.end()) {
             _request.setErrorCode(400);
         }
+    }
+}
+
+void HttpRequestParser::_initiateBodyReading() {
+    // Check for content-length header
+    std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find("content-length");
+    if (contentLengthIt == _request.headers.end()) {
+        // No body expected
+        _state = COMPLETE;
+        return;
+    }
+
+    _parseContentLength();
+
+    if (_state == ERROR) {
+        return;
+    }
+
+    // Content-Length of 0 means complete immediately
+    if (_contentLength == 0) {
+        _state = COMPLETE;
+        return;
+    }
+
+    // Check if we already have body data in the buffer
+    std::size_t headerEnd = _buffer.find("\r\n\r\n");
+    if (headerEnd != std::string::npos) {
+        std::size_t bodyStart = headerEnd + 4; // Skip \r\n\r\n
+        if (bodyStart < _buffer.size()) {
+            _bodyBuffer = _buffer.substr(bodyStart);
+        }
+    }
+
+    // Check if we have enough body data already
+    if (_bodyBuffer.size() >= _contentLength) {
+        _request.setBody(_bodyBuffer.substr(0, _contentLength));
+        _state = COMPLETE;
+    } else {
+        _state = BODY;
+    }
+}
+
+void HttpRequestParser::_parseContentLength() {
+    std::map<std::string, std::string>::iterator it = _request.headers.find("content-length");
+    if (it == _request.headers.end()) {
+        _contentLength = 0;
+        return;
+    }
+
+    const std::string& value = it->second;
+
+    // Validate: must be digits only
+    if (value.empty()) {
+        _request.setErrorCode(400);
+        _state = ERROR;
+        return;
+    }
+
+    for (std::size_t i = 0; i < value.length(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(value[i]))) {
+            _request.setErrorCode(400);
+            _state = ERROR;
+            return;
+        }
+    }
+
+    // Parse the value
+    _contentLength = 0;
+    for (std::size_t i = 0; i < value.length(); ++i) {
+        int digit = value[i] - '0';
+        // Check for overflow
+        if (_contentLength > (static_cast<std::size_t>(-1) - digit) / 10) {
+            _request.setErrorCode(400);
+            _state = ERROR;
+            return;
+        }
+        _contentLength = _contentLength * 10 + digit;
+    }
+
+    // Check against max body size
+    if (_maxBodySize > 0 && _contentLength > _maxBodySize) {
+        _request.setErrorCode(413);
+        _state = ERROR;
     }
 }
