@@ -114,6 +114,16 @@ void HttpRequestParser::_parseRequestLine() {
     // All validations passed - set the fields
     _request.setMethod(method);
     _request.setUri(uri);
+
+    // Split URI into path and query string
+    std::size_t queryPos = uri.find('?');
+    if (queryPos != std::string::npos) {
+        _request.setPath(uri.substr(0, queryPos));
+        _request.setQueryString(uri.substr(queryPos + 1));
+    } else {
+        _request.setPath(uri);
+    }
+
     _request.setHttpVersion(httpVersion);
     _request.setErrorCode(0);
 }
