@@ -281,6 +281,12 @@ void HttpRequestParser::_initiateBodyReading() {
                         
                         // If we got the complete body in one go
                         if (_chunkedDecoder.isComplete()) {
+                            // Check max body size before accepting
+                            if (_maxBodySize > 0 && _chunkedDecoder.getBody().size() > _maxBodySize) {
+                                _request.setErrorCode(413);
+                                _state = ERROR;
+                                return;
+                            }
                             _request.setBody(_chunkedDecoder.getBody());
                             _request.headers["content-length"] = _request.body;
                             std::ostringstream oss;

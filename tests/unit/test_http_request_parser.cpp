@@ -221,6 +221,54 @@ TEST(HttpRequestParser, PipelinedRequests)
 	ASSERT_EQ(0,           req.errorCode);
 }
 
+/* 12. Chunked body exceeding max size in single buffer returns 413 --------- */
+TEST(HttpRequestParser, ChunkedBodyExceedingMaxInSingleBufferReturns413)
+{
+	HttpRequestParser parser;
+	parser.setMaxBodySize(10);
+
+	// Chunked-encoded body: "Hello World!" (12 bytes) encoded as:
+	// "c\r\nHello World!\r\n0\r\n\r\n"
+	std::string chunkedBody = "c\r\nHello World!\r\n0\r\n\r\n";
+	std::ostringstream oss;
+	oss << "POST /upload HTTP/1.1\r\n"
+	    << "Host: localhost\r\n"
+	    << "Transfer-Encoding: chunked\r\n"
+	    << "\r\n"
+	    << chunkedBody;
+
+	parser.feed(oss.str());
+
+	ASSERT_TRUE(parser.isComplete());
+
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(413, req.errorCode);
+}
+
+/* 13. Chunked body within max size in single buffer accepted --------------- */
+TEST(HttpRequestParser, ChunkedBodyWithinMaxInSingleBufferAccepted)
+{
+	HttpRequestParser parser;
+	parser.setMaxBodySize(20);
+
+	// Chunked-encoded body: "Hello World!" (12 bytes) - within limit
+	std::string chunkedBody = "c\r\nHello World!\r\n0\r\n\r\n";
+	std::ostringstream oss;
+	oss << "POST /upload HTTP/1.1\r\n"
+	    << "Host: localhost\r\n"
+	    << "Transfer-Encoding: chunked\r\n"
+	    << "\r\n"
+	    << chunkedBody;
+
+	parser.feed(oss.str());
+
+	ASSERT_TRUE(parser.isComplete());
+
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(0, req.errorCode);
+	ASSERT_EQ(S("Hello World!"), req.body);
+}
+
 /* ======================================================================== */
 /*  Runner                                                                   */
 /* ======================================================================== */
