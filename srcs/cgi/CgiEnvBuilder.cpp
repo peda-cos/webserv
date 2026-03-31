@@ -7,7 +7,7 @@ void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request) {
     env_map["SERVER_PROTOCOL"] = "HTTP/" + request.httpVersion;
     env_map["SERVER_SOFTWARE"] = "Webserv/1.0"; // TODO: tornar dinâmico com base no nome do servidor e versão, como ?
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
-    env_map["SCRIPT_NAME"] = request.uri;
+    env_map["SCRIPT_NAME"] = request.path.empty() ? request.uri : request.path;
     env_map["REQUEST_METHOD"] = request.method;
     env_map["REQUEST_URI"] = request.uri;
     env_map["PATH_INFO"] = "PENDENTE"; // TODO: Entender melhor essa variável e como preenchê-la corretamente
@@ -23,8 +23,8 @@ void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
     std::stringstream content_length_stream;
     content_length_stream << request.body.size();
     env_map["CONTENT_LENGTH"] = content_length_stream.str();
-    StringMapIterator content_type_it = request.headers.find("Content-Type");
-    if (request.headers.find("Content-Type") != request.headers.end()) {
+    StringMapIterator content_type_it = request.headers.find("content-type");
+    if (content_type_it != request.headers.end()) {
         env_map["CONTENT_TYPE"] = content_type_it->second;
     }
 }
@@ -56,6 +56,7 @@ CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request) : envp(NULL) {
     if (request.method == "POST") {
         build_envs_for_post_request(request);
     }
+    build_headers_envs(request);
     build_envp();
 }
 

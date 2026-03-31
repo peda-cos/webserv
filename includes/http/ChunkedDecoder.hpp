@@ -13,6 +13,12 @@ public:
         : std::runtime_error(msg) {}
 };
 
+class ChunkedBodyTooLargeException : public ChunkedDecodeException {
+public:
+    explicit ChunkedBodyTooLargeException(const std::string& msg)
+        : ChunkedDecodeException(msg) {}
+};
+
 /**
  * Incremental decoder for HTTP chunked transfer-encoding.
  *
@@ -32,6 +38,7 @@ public:
         READING_SIZE,
         READING_DATA,
         READING_TRAILER_CRLF,
+        READING_TRAILERS,
         DONE
     };
 
@@ -53,6 +60,7 @@ public:
      * @throw ChunkedDecodeException if malformed data is encountered
      */
     void feed(const std::string& data);
+    void setMaxBodySize(std::size_t size);
 
     /**
      * Check if the complete body has been decoded.
@@ -88,6 +96,7 @@ private:
     std::string _body;             // Accumulated decoded body
     std::size_t _currentChunkSize; // Size of chunk being read
     std::size_t _bytesRead;        // Bytes read in current chunk
+    std::size_t _maxBodySize;      // Maximum decoded body size (0 = unlimited)
     bool _error;                   // Error state flag
 
     /**
@@ -118,6 +127,8 @@ private:
      * Handle READING_TRAILER_CRLF state - consume CRLF after chunk data.
      */
     void _processReadingTrailerCrlf();
+    void _processReadingTrailers();
+    void _appendToBody(const std::string& data);
 };
 
 #endif

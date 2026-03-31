@@ -358,6 +358,109 @@ TEST(HttpRequestParser, ChunkedBodySplitAcrossMultipleFeeds)
 	ASSERT_EQ(S("MozillaDeveloper"), req.body);
 }
 
+/* 17. Duplicate matching Content-Length values are accepted ----------------- */
+TEST(HttpRequestParser, DuplicateMatchingContentLengthAccepted)
+{
+	HttpRequestParser parser;
+	parser.feed(S("POST /dup HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Content-Length: 5\r\n"
+	              "Content-Length: 5\r\n"
+	              "\r\n"
+	              "Hello"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(0, req.errorCode);
+	ASSERT_EQ(S("Hello"), req.body);
+}
+
+/* 18. Duplicate conflicting Content-Length values are rejected ------------- */
+TEST(HttpRequestParser, DuplicateConflictingContentLengthRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("POST /dup HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Content-Length: 5\r\n"
+	              "Content-Length: 6\r\n"
+	              "\r\n"
+	              "Hello!"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(400, req.errorCode);
+}
+
+/* 19. Duplicate Host header is rejected ------------------------------------ */
+TEST(HttpRequestParser, DuplicateHostRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET / HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Host: backup\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(400, req.errorCode);
+}
+
+/* 20. Invalid HTTP version is rejected ------------------------------------- */
+TEST(HttpRequestParser, InvalidHttpVersionRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET / HTTP/banana\r\n"
+	              "Host: localhost\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(400, req.errorCode);
+}
+
+/* 21. Parser reset clears state but preserves reuse support ----------------- */
+TEST(HttpRequestParser, ResetAllowsReuse)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(S("/first"), parser.getRequest().uri);
+
+	parser.reset();
+	parser.feed(S("GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(S("/second"), parser.getRequest().uri);
+}
+
+/* 22. Pipelined requests expose remainder for next cycle -------------------- */
+TEST(HttpRequestParser, PipelinedRequestsExposeRemainder)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET /first HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "\r\n"
+	              "GET /second HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(S("GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n"), parser.getRemainder());
+}
+
+/* 23. Unsupported transfer-encoding is rejected ---------------------------- */
+TEST(HttpRequestParser, UnsupportedTransferEncodingRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("POST /data HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Transfer-Encoding: gzip\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(400, parser.getRequest().errorCode);
+}
+
 /* ======================================================================== */
 /*  Runner                                                                   */
 /* ======================================================================== */

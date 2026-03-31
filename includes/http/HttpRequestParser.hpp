@@ -23,8 +23,7 @@ class HttpRequestParser {
         bool isComplete() const;
         HttpRequest getRequest() const;
         void setMaxBodySize(std::size_t size);
-
-    public:
+        void reset();
         std::string getRemainder() const;
 
     private:
@@ -41,6 +40,12 @@ class HttpRequestParser {
         void _parseHeaders();
         void _initiateBodyReading(const std::string& afterHeaders);
         void _parseContentLength();
+        void _feedChunkedDecoder(const std::string& data);
+        void _finalizeChunkedBody();
+        bool _isSupportedHttpVersion(const std::string& version) const;
+        bool _isChunkedTransferEncoding(const std::string& value) const;
+        bool _hasConflictingContentLength(const std::string& value);
+        static std::string _trimOws(const std::string& str);
 };
 
 #endif

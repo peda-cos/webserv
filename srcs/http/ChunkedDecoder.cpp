@@ -2,8 +2,11 @@
 
 ChunkedDecoder::ChunkedDecoder()
     : _state(READING_SIZE),
+      _buffer(),
+      _body(),
       _currentChunkSize(0),
       _bytesRead(0),
+      _maxBodySize(0),
       _error(false) {}
 
 ChunkedDecoder::~ChunkedDecoder() {}
@@ -15,6 +18,10 @@ void ChunkedDecoder::feed(const std::string& data) {
 
     _buffer += data;
     _processBuffer();
+}
+
+void ChunkedDecoder::setMaxBodySize(std::size_t size) {
+    _maxBodySize = size;
 }
 
 bool ChunkedDecoder::isComplete() const {
@@ -82,6 +89,10 @@ void ChunkedDecoder::_processBuffer() {
                 _processReadingTrailerCrlf();
                 break;
 
+            case READING_TRAILERS:
+                _processReadingTrailers();
+                break;
+
             case DONE:
                 return;
         }
@@ -143,32 +154,37 @@ void ChunkedDecoder::_processReadingSize() {
     _bytesRead = 0;
 
     if (_currentChunkSize == 0) {
-        // Last chunk - need to read final CRLF after size line
-        _state = READING_TRAILER_CRLF;
+        // Last chunk - optional trailer headers follow, terminated by CRLF
+        _state = READING_TRAILERS;
     } else {
         _state = READING_DATA;
     }
 }
 
 void ChunkedDecoder::_processReadingData() {
-    // How many bytes do we still need for this chunk?
     std::size_t remaining = _currentChunkSize - _bytesRead;
 
     if (_buffer.size() < remaining) {
-        // Not enough data yet - consume all we have
-        _body += _buffer;
+        _appendToBody(_buffer);
         _bytesRead += _buffer.size();
         _buffer.clear();
         return;
     }
 
-    // We have enough data - consume exactly 'remaining' bytes
-    _body += _buffer.substr(0, remaining);
+    std::string chunkData = _buffer.substr(0, remaining);
+    _appendToBody(chunkData);
     _buffer.erase(0, remaining);
     _bytesRead += remaining;
 
-    // Move to trailer CRLF state
     _state = READING_TRAILER_CRLF;
+}
+
+void ChunkedDecoder::_appendToBody(const std::string& data) {
+    if (_maxBodySize > 0 && _body.size() + data.size() > _maxBodySize) {
+        _error = true;
+        throw ChunkedBodyTooLargeException("Chunked body exceeds configured maximum size");
+    }
+    _body += data;
 }
 
 void ChunkedDecoder::_processReadingTrailerCrlf() {
@@ -186,11 +202,21 @@ void ChunkedDecoder::_processReadingTrailerCrlf() {
     // Consume the CRLF
     _buffer.erase(0, 2);
 
-    // If we just finished a zero-size chunk, we're done
-    if (_currentChunkSize == 0) {
-        _state = DONE;
-    } else {
-        // Otherwise, move to next chunk
-        _state = READING_SIZE;
+    _state = READING_SIZE;
+}
+
+void ChunkedDecoder::_processReadingTrailers() {
+    std::size_t crlfPos = _buffer.find("\r\n");
+
+    if (crlfPos == std::string::npos) {
+        return;
     }
+
+    if (crlfPos == 0) {
+        _buffer.erase(0, 2);
+        _state = DONE;
+        return;
+    }
+
+    _buffer.erase(0, crlfPos + 2);
 }

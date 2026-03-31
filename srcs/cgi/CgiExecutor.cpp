@@ -15,10 +15,16 @@
 std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& location_config)
 {
     CgiPipeManager pipe;
+    const std::string& request_path = request.path.empty() ? request.uri : request.path;
+    std::size_t dotPos = request_path.rfind('.');
 
-    std::string file_extension = request.uri.substr(request.uri.rfind('.'));
+    if (dotPos == std::string::npos) {
+        throw CgiException("No CGI handler configured for request path without extension: " + request_path);
+    }
+
+    std::string file_extension = request_path.substr(dotPos);
     std::string cgi_interpreter = location_config.cgi_handlers[file_extension];
-    std::string cgi_script_path = location_config.root + request.uri;
+    std::string cgi_script_path = location_config.root + request_path;
 
     if (cgi_interpreter.empty()) {
         throw CgiException("No CGI handler configured for extension: " + file_extension);

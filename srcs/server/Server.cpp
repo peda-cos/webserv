@@ -11,6 +11,7 @@
 #include <errno.h>
 
 #include <cstring>
+#include <cctype>
 #include <sstream>
 #include <iostream>
 
@@ -220,6 +221,12 @@ void Server::_read_from_client(int fd) {
     Connection& conn = _connections[fd];
     conn.last_activity = time(NULL);
     std::string data(buf, static_cast<size_t>(n));
+    conn.read_buffer += data;
+
+    if (conn.read_buffer.size() > MAX_HEADER_BUFFER_SIZE && !conn.parser.isComplete()) {
+        _close_connection(fd);
+        return;
+    }
 
     conn.parser.feed(data);
 
@@ -227,35 +234,11 @@ void Server::_read_from_client(int fd) {
         return;
     }
 
-    HttpRequest req = conn.parser.getRequest();
-
-    if (req.errorCode == 413) {
-        const std::string response413 =
-            "HTTP/1.1 413 Payload Too Large\r\n"
-            "Content-Type: text/plain\r\n"
-            "Content-Length: 17\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "Payload Too Large";
-        conn.write_buffer = response413;
-        conn.keep_alive = false;
-        _set_pollout(fd, true);
+    if (!conn.write_buffer.empty()) {
         return;
     }
 
-    conn.keep_alive = (conn.read_buffer.find("Connection: close") == std::string::npos);
-    const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
-
-    const std::string response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 18\r\n"
-        "Connection: " + conn_header + "\r\n"
-        "\r\n"
-        "Hello, World test!";
-
-    conn.write_buffer = response;
-    _set_pollout(fd, true);
+    _queue_parsed_request_response(fd);
 }
 
 void Server::_write_to_client(int fd) {
@@ -278,8 +261,12 @@ void Server::_write_to_client(int fd) {
     if (conn.write_buffer.empty()) {
         _set_pollout(fd, false);
         if (conn.keep_alive) {
-            conn.read_buffer.clear();
             conn.last_activity = time(NULL);
+            if (!conn.parser.isComplete()) {
+                return;
+            }
+
+            _queue_parsed_request_response(fd);
         } else {
             _close_connection(fd);
         }
@@ -327,5 +314,83 @@ void Server::_check_timeouts() {
     for (size_t i = 0; i < to_close.size(); ++i) {
         Logger::info("Closing idle connection (timeout)");
         _close_connection(to_close[i]);
+    }
+}
+
+bool Server::_queue_parsed_request_response(int fd) {
+    Connection& conn = _connections[fd];
+    HttpRequest req = conn.parser.getRequest();
+    std::string remainder = conn.parser.getRemainder();
+    bool shouldClose = false;
+
+    if (req.httpVersion == "1.0") {
+        shouldClose = true;
+    }
+
+    std::map<std::string, std::string>::const_iterator connectionIt = req.headers.find("connection");
+    if (connectionIt != req.headers.end()) {
+        std::string value = connectionIt->second;
+        for (std::size_t i = 0; i < value.length(); ++i) {
+            value[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(value[i])));
+        }
+        if (value.find("close") != std::string::npos) {
+            shouldClose = true;
+        } else if (req.httpVersion == "1.0" && value.find("keep-alive") != std::string::npos) {
+            shouldClose = false;
+        }
+    }
+
+    conn.keep_alive = !shouldClose;
+    conn.read_buffer = remainder;
+
+    if (req.errorCode != 0) {
+        conn.keep_alive = false;
+        conn.write_buffer = _build_error_response(req.errorCode, true);
+    } else {
+        const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+        conn.write_buffer =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 18\r\n"
+            "Connection: " + conn_header + "\r\n"
+            "\r\n"
+            "Hello, World test!";
+    }
+
+    conn.parser.reset();
+    conn.parser.setMaxBodySize(conn.server_config->client_max_body_size);
+    if (conn.keep_alive && !remainder.empty()) {
+        conn.parser.feed(remainder);
+    }
+
+    _set_pollout(fd, true);
+    return true;
+}
+
+std::string Server::_build_error_response(int statusCode, bool closeConnection) const {
+    std::string reason = _reason_phrase(statusCode);
+    std::string body = reason;
+    std::string connection = closeConnection ? "close" : "keep-alive";
+    std::ostringstream oss;
+
+    oss << "HTTP/1.1 " << statusCode << " " << reason << "\r\n"
+        << "Content-Type: text/plain\r\n"
+        << "Content-Length: " << body.size() << "\r\n"
+        << "Connection: " << connection << "\r\n"
+        << "\r\n"
+        << body;
+    return oss.str();
+}
+
+std::string Server::_reason_phrase(int statusCode) const {
+    switch (statusCode) {
+        case 400:
+            return "Bad Request";
+        case 413:
+            return "Payload Too Large";
+        case 431:
+            return "Request Header Fields Too Large";
+        default:
+            return "Internal Server Error";
     }
 }

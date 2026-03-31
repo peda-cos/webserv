@@ -17,6 +17,7 @@ UNIT_SRCS = \
 	$(UNIT_DIR)/test_http_response_builder.cpp \
 	$(UNIT_DIR)/test_method_handlers.cpp \
 	$(UNIT_DIR)/test_cgi_env.cpp \
+	$(UNIT_DIR)/test_cgi_parser_contract.cpp \
 	$(UNIT_DIR)/test_cgi_executor.cpp \
 	$(UNIT_DIR)/test_chunked_decoder.cpp \
 	$(UNIT_DIR)/test_connection_loop.cpp
@@ -80,6 +81,9 @@ TEST_CGI_EXECUTOR_SRCS = $(UTILS_SRCS) $(HTTP_SRCS) ../srcs/cgi/CgiEnvBuilder.cp
 $(UNIT_DIR)/test_cgi_env: $(UNIT_DIR)/test_cgi_env.cpp $(FRAMEWORK_DIR)/minitest.hpp $(TEST_CGI_SRCS)
 	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_SRCS)
 
+$(UNIT_DIR)/test_cgi_parser_contract: $(UNIT_DIR)/test_cgi_parser_contract.cpp $(FRAMEWORK_DIR)/minitest.hpp $(TEST_CGI_EXECUTOR_SRCS)
+	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_EXECUTOR_SRCS)
+
 $(UNIT_DIR)/test_cgi_executor: $(UNIT_DIR)/test_cgi_executor.cpp $(FRAMEWORK_DIR)/minitest.hpp $(TEST_CGI_EXECUTOR_SRCS)
 	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_EXECUTOR_SRCS)
 
@@ -135,5 +139,8 @@ $(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWO
 		../srcs/utils/ConfigUtils.cpp \
 		../srcs/utils/HttpUtils.cpp \
 		../srcs/utils/StringUtils.cpp \
+		../srcs/http/HttpRequest.cpp \
+		../srcs/http/HttpRequestParser.cpp \
+		../srcs/http/ChunkedDecoder.cpp \
 		../srcs/utils/ParserDirectiveUtils.cpp \
 		../srcs/utils/ParsingUtils.cpp

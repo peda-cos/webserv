@@ -85,4 +85,38 @@ TEST(ChunkedDecoder, TruncatedChunkAwaitsMore)
 	ASSERT_FALSE(decoder.hasError());
 }
 
+/* ------------------------------------------------------------------------ */
+/* 7. Trailing bytes after the terminator are preserved as remainder.        */
+/* ------------------------------------------------------------------------ */
+TEST(ChunkedDecoder, PreservesRemainderAfterDone)
+{
+	ChunkedDecoder decoder;
+	decoder.feed("5\r\nhello\r\n0\r\n\r\nNEXT");
+
+	ASSERT_TRUE(decoder.isComplete());
+	ASSERT_EQ(std::string("NEXT"), decoder.getRemainder());
+}
+
+/* ------------------------------------------------------------------------ */
+/* 8. Trailer headers after the zero chunk are skipped before completion.    */
+/* ------------------------------------------------------------------------ */
+TEST(ChunkedDecoder, SupportsTrailerHeaders)
+{
+	ChunkedDecoder decoder;
+	decoder.feed("5\r\nhello\r\n0\r\nX-Test: yes\r\n\r\n");
+
+	ASSERT_TRUE(decoder.isComplete());
+	ASSERT_EQ(std::string("hello"), decoder.getBody());
+}
+
+/* ------------------------------------------------------------------------ */
+/* 9. Configured max body size fails oversized decoded bodies.               */
+/* ------------------------------------------------------------------------ */
+TEST(ChunkedDecoder, BodyTooLargeThrowsSpecificException)
+{
+	ChunkedDecoder decoder;
+	decoder.setMaxBodySize(4);
+	ASSERT_THROWS(decoder.feed("5\r\nhello\r\n0\r\n\r\n"), ChunkedBodyTooLargeException);
+}
+
 MINITEST_MAIN()

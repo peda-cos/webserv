@@ -1,8 +1,16 @@
 #include <HttpRequestParser.hpp>
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <map>
 #include <sstream>
+
+static const std::string CRLF = "\r\n";
+static const std::string DOUBLE_CRLF = "\r\n\r\n";
+static const std::string HTTP_VERSION_PREFIX = "HTTP/";
+static const std::string HEADER_HOST = "host";
+static const std::string HEADER_TRANSFER_ENCODING = "transfer-encoding";
+static const std::string HEADER_CONTENT_LENGTH = "content-length";
 
 HttpRequestParser::HttpRequestParser()
     : _buffer()
@@ -12,9 +20,22 @@ HttpRequestParser::HttpRequestParser()
     , _contentLength(0)
     , _bodyBuffer()
     , _remainder()
-{}
+{
+    _chunkedDecoder.setMaxBodySize(_maxBodySize);
+}
 
 HttpRequestParser::~HttpRequestParser() {}
+
+void HttpRequestParser::reset() {
+    _buffer.clear();
+    _state = REQUEST_LINE;
+    _request = HttpRequest();
+    _contentLength = 0;
+    _bodyBuffer.clear();
+    _chunkedDecoder = ChunkedDecoder();
+    _chunkedDecoder.setMaxBodySize(_maxBodySize);
+    _remainder.clear();
+}
 
 void HttpRequestParser::feed(const std::string& data) {
     if (_state == COMPLETE || _state == ERROR) {
@@ -28,16 +49,14 @@ void HttpRequestParser::feed(const std::string& data) {
 
     // Process based on current state
     if (_state == REQUEST_LINE || _state == HEADERS) {
-        // Check for end of headers marker \r\n\r\n
-        std::size_t endPos = _buffer.find("\r\n\r\n");
+        std::size_t endPos = _buffer.find(DOUBLE_CRLF);
         if (endPos != std::string::npos) {
             _state = HEADERS;
             _parseRequestLine();
             if (_request.errorCode == 0) {
                 _parseHeaders();
                 if (_request.errorCode == 0) {
-                    // Capture any data after headers before _buffer is cleared
-                    std::size_t bodyStart = endPos + 4;
+                    std::size_t bodyStart = endPos + DOUBLE_CRLF.size();
                     std::string afterHeaders;
                     if (bodyStart < _buffer.size()) {
                         afterHeaders = _buffer.substr(bodyStart);
@@ -65,32 +84,7 @@ void HttpRequestParser::feed(const std::string& data) {
             _state = COMPLETE;
         }
     } else if (_state == CHUNKED_BODY) {
-        // Delegate to chunked decoder
-        try {
-            _chunkedDecoder.feed(data);
-
-            // Check max body size against accumulated body
-            if (_maxBodySize > 0 && _chunkedDecoder.getBody().size() > _maxBodySize) {
-                _request.setErrorCode(413);
-                _state = ERROR;
-                return;
-            }
-
-            // Check if complete
-            if (_chunkedDecoder.isComplete()) {
-                _request.setBody(_chunkedDecoder.getBody());
-                // Update content-length header for downstream handlers
-                std::ostringstream oss;
-                oss << _request.body.size();
-                _request.headers["content-length"] = oss.str();
-                // Capture remainder from chunked decoder
-                _remainder = _chunkedDecoder.getRemainder();
-                _state = COMPLETE;
-            }
-        } catch (const ChunkedDecodeException&) {
-            _request.setErrorCode(400);
-            _state = ERROR;
-        }
+        _feedChunkedDecoder(data);
     }
 }
 
@@ -108,11 +102,11 @@ std::string HttpRequestParser::getRemainder() const {
 
 void HttpRequestParser::setMaxBodySize(std::size_t size) {
     _maxBodySize = size;
+    _chunkedDecoder.setMaxBodySize(size);
 }
 
 void HttpRequestParser::_parseRequestLine() {
-    // Find the first line (up to first \r\n)
-    std::size_t lineEnd = _buffer.find("\r\n");
+    std::size_t lineEnd = _buffer.find(CRLF);
     if (lineEnd == std::string::npos) {
         _request.setErrorCode(400);
         return;
@@ -120,14 +114,16 @@ void HttpRequestParser::_parseRequestLine() {
 
     std::string requestLine = _buffer.substr(0, lineEnd);
 
-    // Check for empty request line
     if (requestLine.empty()) {
         _request.setErrorCode(400);
         return;
     }
 
-    // Check for consecutive spaces (extra whitespace)
-    if (requestLine.find("  ") != std::string::npos) {
+    // Request line must be exactly METHOD SP URI SP HTTP/version
+    if (requestLine.find('\t') != std::string::npos ||
+        requestLine[0] == ' ' ||
+        requestLine[requestLine.length() - 1] == ' ' ||
+        requestLine.find("  ") != std::string::npos) {
         _request.setErrorCode(400);
         return;
     }
@@ -168,13 +164,14 @@ void HttpRequestParser::_parseRequestLine() {
     }
 
     // Validate HTTP/ prefix and extract version number
-    if (versionToken.length() < 6 || versionToken.substr(0, 5) != "HTTP/") {
+    if (versionToken.length() <= HTTP_VERSION_PREFIX.length() ||
+        versionToken.substr(0, HTTP_VERSION_PREFIX.length()) != HTTP_VERSION_PREFIX) {
         _request.setErrorCode(400);
         return;
     }
 
-    std::string httpVersion = versionToken.substr(5);
-    if (httpVersion.empty()) {
+    std::string httpVersion = versionToken.substr(HTTP_VERSION_PREFIX.length());
+    if (!_isSupportedHttpVersion(httpVersion)) {
         _request.setErrorCode(400);
         return;
     }
@@ -197,32 +194,24 @@ void HttpRequestParser::_parseRequestLine() {
 }
 
 void HttpRequestParser::_parseHeaders() {
-    // Skip request line - find first \r\n
-    std::size_t pos = _buffer.find("\r\n");
+    std::size_t pos = _buffer.find(CRLF);
     if (pos == std::string::npos) {
         _request.setErrorCode(400);
         return;
     }
-    pos += 2; // Move past \r\n
+    pos += CRLF.size();
 
-    // Find end of headers marker from the start of the buffer
-    // (not from pos, because the \r\n\r\n includes the last \r\n
-    // of the request line when there are zero headers)
-    std::size_t endPos = _buffer.find("\r\n\r\n");
+    std::size_t endPos = _buffer.find(DOUBLE_CRLF);
     if (endPos == std::string::npos) {
         _request.setErrorCode(400);
         return;
     }
-    // Adjust endPos to mark the end of the header section:
-    // headers run from pos to endPos + 2 (the first \r\n of \r\n\r\n
-    // is the end of the last header line, or part of the request line
-    // end if there are no headers)
-    std::size_t headerEnd = endPos + 2;
+    std::size_t headerEnd = endPos + CRLF.size();
 
     // Parse each header line
     while (pos < headerEnd) {
         // Find end of this header line
-        std::size_t lineEnd = _buffer.find("\r\n", pos);
+        std::size_t lineEnd = _buffer.find(CRLF, pos);
         if (lineEnd == std::string::npos || lineEnd > endPos) {
             break;
         }
@@ -244,32 +233,21 @@ void HttpRequestParser::_parseHeaders() {
             return;
         }
 
-        // Extract field name and convert to lowercase
+        // Extract field name: validate characters and convert to lowercase in a single pass
         std::string fieldName = headerLine.substr(0, colonPos);
         for (std::size_t i = 0; i < fieldName.length(); ++i) {
-            fieldName[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(fieldName[i])));
+            unsigned char ch = static_cast<unsigned char>(fieldName[i]);
+            if (std::iscntrl(ch) || ch == ' ' || ch == '\t') {
+                _request.setErrorCode(400);
+                return;
+            }
+            fieldName[i] = static_cast<char>(std::tolower(ch));
         }
 
-        // Extract field value (after colon) and trim whitespace
+        // Extract field value (after colon) and trim OWS (optional whitespace)
         std::string fieldValue;
         if (colonPos + 1 < headerLine.length()) {
-            fieldValue = headerLine.substr(colonPos + 1);
-
-            // Trim leading whitespace (SP and HTAB)
-            std::size_t valueStart = 0;
-            while (valueStart < fieldValue.length() &&
-                   (fieldValue[valueStart] == ' ' || fieldValue[valueStart] == '\t')) {
-                ++valueStart;
-            }
-
-            // Trim trailing whitespace (SP and HTAB)
-            std::size_t valueEnd = fieldValue.length();
-            while (valueEnd > valueStart &&
-                   (fieldValue[valueEnd - 1] == ' ' || fieldValue[valueEnd - 1] == '\t')) {
-                --valueEnd;
-            }
-
-            fieldValue = fieldValue.substr(valueStart, valueEnd - valueStart);
+            fieldValue = _trimOws(headerLine.substr(colonPos + 1));
         }
 
         // Handle duplicate headers: concatenate with ", "
@@ -281,59 +259,51 @@ void HttpRequestParser::_parseHeaders() {
         }
 
         // Move to next header line
-        pos = lineEnd + 2; // Move past \r\n
+        pos = lineEnd + CRLF.size();
     }
 
     // Validate Host header for HTTP/1.1
     if (_request.httpVersion == "1.1") {
-        if (_request.headers.find("host") == _request.headers.end()) {
+        std::map<std::string, std::string>::iterator hostIt = _request.headers.find(HEADER_HOST);
+        if (hostIt == _request.headers.end() || hostIt->second.empty() || hostIt->second.find(',') != std::string::npos) {
             _request.setErrorCode(400);
+            return;
         }
+    }
+
+    std::map<std::string, std::string>::iterator transferEncodingIt = _request.headers.find(HEADER_TRANSFER_ENCODING);
+    if (transferEncodingIt != _request.headers.end() && !_isChunkedTransferEncoding(transferEncodingIt->second)) {
+        _request.setErrorCode(400);
+        return;
+    }
+
+    std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find(HEADER_CONTENT_LENGTH);
+    if (contentLengthIt != _request.headers.end() && _hasConflictingContentLength(contentLengthIt->second)) {
+        _request.setErrorCode(400);
     }
 }
 
 void HttpRequestParser::_initiateBodyReading(const std::string& afterHeaders) {
-    // Check for Transfer-Encoding: chunked first (RFC 2616 §4.4)
-    std::map<std::string, std::string>::iterator transferEncodingIt = _request.headers.find("transfer-encoding");
+    std::map<std::string, std::string>::iterator transferEncodingIt = _request.headers.find(HEADER_TRANSFER_ENCODING);
     if (transferEncodingIt != _request.headers.end()) {
-        // Chunked encoding takes precedence
-        if (transferEncodingIt->second == "chunked") {
-            // Feed any data already after headers to the chunked decoder
+        if (_isChunkedTransferEncoding(transferEncodingIt->second)) {
             if (!afterHeaders.empty()) {
-                try {
-                    _chunkedDecoder.feed(afterHeaders);
-                    
-                    // If we got the complete body in one go
-                    if (_chunkedDecoder.isComplete()) {
-                        // Check max body size before accepting
-                        if (_maxBodySize > 0 && _chunkedDecoder.getBody().size() > _maxBodySize) {
-                            _request.setErrorCode(413);
-                            _state = ERROR;
-                            return;
-                        }
-                        _request.setBody(_chunkedDecoder.getBody());
-                        // Update content-length header for downstream handlers
-                        std::ostringstream oss;
-                        oss << _request.body.size();
-                        _request.headers["content-length"] = oss.str();
-                        // Capture remainder from chunked decoder
-                        _remainder = _chunkedDecoder.getRemainder();
-                        _state = COMPLETE;
-                        return;
-                    }
-                } catch (const ChunkedDecodeException&) {
-                    _request.setErrorCode(400);
-                    _state = ERROR;
+                _feedChunkedDecoder(afterHeaders);
+                if (_state == COMPLETE || _state == ERROR) {
                     return;
                 }
             }
             _state = CHUNKED_BODY;
             return;
         }
+
+        _request.setErrorCode(400);
+        _state = ERROR;
+        return;
     }
 
     // Check for content-length header
-    std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find("content-length");
+    std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find(HEADER_CONTENT_LENGTH);
     if (contentLengthIt == _request.headers.end()) {
         // No body expected - any afterHeaders is the remainder (pipelined request)
         _remainder = afterHeaders;
@@ -368,8 +338,32 @@ void HttpRequestParser::_initiateBodyReading(const std::string& afterHeaders) {
     }
 }
 
+void HttpRequestParser::_feedChunkedDecoder(const std::string& data) {
+    try {
+        _chunkedDecoder.feed(data);
+        if (_chunkedDecoder.isComplete()) {
+            _finalizeChunkedBody();
+        }
+    } catch (const ChunkedBodyTooLargeException&) {
+        _request.setErrorCode(413);
+        _state = ERROR;
+    } catch (const ChunkedDecodeException&) {
+        _request.setErrorCode(400);
+        _state = ERROR;
+    }
+}
+
+void HttpRequestParser::_finalizeChunkedBody() {
+    _request.setBody(_chunkedDecoder.getBody());
+    std::ostringstream oss;
+    oss << _request.body.size();
+    _request.headers[HEADER_CONTENT_LENGTH] = oss.str();
+    _remainder = _chunkedDecoder.getRemainder();
+    _state = COMPLETE;
+}
+
 void HttpRequestParser::_parseContentLength() {
-    std::map<std::string, std::string>::iterator it = _request.headers.find("content-length");
+    std::map<std::string, std::string>::iterator it = _request.headers.find(HEADER_CONTENT_LENGTH);
     if (it == _request.headers.end()) {
         _contentLength = 0;
         return;
@@ -410,4 +404,85 @@ void HttpRequestParser::_parseContentLength() {
         _request.setErrorCode(413);
         _state = ERROR;
     }
+}
+
+bool HttpRequestParser::_isSupportedHttpVersion(const std::string& version) const {
+    return version == "1.1" || version == "1.0";
+}
+
+std::string HttpRequestParser::_trimOws(const std::string& str) {
+    std::size_t start = 0;
+    while (start < str.length() && (str[start] == ' ' || str[start] == '\t')) {
+        ++start;
+    }
+    std::size_t end = str.length();
+    while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t')) {
+        --end;
+    }
+    return str.substr(start, end - start);
+}
+
+bool HttpRequestParser::_isChunkedTransferEncoding(const std::string& value) const {
+    std::size_t start = 0;
+
+    while (start < value.length()) {
+        std::size_t end = value.find(',', start);
+        std::string raw = value.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        std::string token = _trimOws(raw);
+
+        for (std::size_t i = 0; i < token.length(); ++i) {
+            token[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(token[i])));
+        }
+
+        if (token.empty()) {
+            return false;
+        }
+        if (token == "chunked") {
+            return end == std::string::npos || end + 1 >= value.length();
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+
+    return false;
+}
+
+bool HttpRequestParser::_hasConflictingContentLength(const std::string& value) {
+    std::size_t start = 0;
+    std::string canonical;
+
+    while (start < value.length()) {
+        std::size_t end = value.find(',', start);
+        std::string raw = value.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        std::string token = _trimOws(raw);
+
+        if (token.empty()) {
+            return true;
+        }
+
+        for (std::size_t i = 0; i < token.length(); ++i) {
+            if (!std::isdigit(static_cast<unsigned char>(token[i]))) {
+                return true;
+            }
+        }
+
+        if (canonical.empty()) {
+            canonical = token;
+        } else if (canonical != token) {
+            return true;
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+
+    if (!canonical.empty()) {
+        _request.headers[HEADER_CONTENT_LENGTH] = canonical;
+    }
+    return false;
 }
