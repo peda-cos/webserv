@@ -1,6 +1,6 @@
 #include <Server.hpp>
 #include <Logger.hpp>
-
+#include <HttpRequest.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -11,6 +11,7 @@
 #include <errno.h>
 
 #include <cstring>
+#include <cctype>
 #include <sstream>
 #include <iostream>
 
@@ -193,13 +194,13 @@ void Server::_accept_new_connection(int listening_fd) {
     const ServerConfig* srv_cfg = _fd_to_server_config[listening_fd];
     _connections[client_fd] = Connection(client_fd, srv_cfg);
 
+    _connections[client_fd].parser.setMaxBodySize(srv_cfg->client_max_body_size);
+
     _register_fd(client_fd, POLLIN);
 
     Logger::info("New connection accepted");
 }
 
-// a sequência "\r\n\r\n" marca o fim dos headers em HTTP/1.1
-// AJUSTAR: integrar HttpRequestParser após feature 03/04
 void Server::_read_from_client(int fd) {
     char buf[READ_BUFFER_SIZE];
 
@@ -219,31 +220,25 @@ void Server::_read_from_client(int fd) {
 
     Connection& conn = _connections[fd];
     conn.last_activity = time(NULL);
-    conn.read_buffer.append(buf, static_cast<size_t>(n));
+    std::string data(buf, static_cast<size_t>(n));
+    conn.read_buffer += data;
 
-    if (conn.read_buffer.find("\r\n\r\n") == std::string::npos &&
-        conn.read_buffer.size() >= MAX_HEADER_BUFFER_SIZE) {
-        Logger::info("Read buffer limit exceeded — closing connection");
+    if (conn.read_buffer.size() > MAX_HEADER_BUFFER_SIZE && !conn.parser.isComplete()) {
         _close_connection(fd);
         return;
     }
 
-    if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
-        conn.keep_alive = (conn.read_buffer.find("Connection: close") == std::string::npos);
-        const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+    conn.parser.feed(data);
 
-        // AJUSTAR: substituir por resposta real do HttpRequestParser + handlers (feature 03/04)
-        const std::string response =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/plain\r\n"
-            "Content-Length: 18\r\n"
-            "Connection: " + conn_header + "\r\n"
-            "\r\n"
-            "Hello, World test!";
-
-        conn.write_buffer = response;
-        _set_pollout(fd, true);
+    if (!conn.parser.isComplete()) {
+        return;
     }
+
+    if (!conn.write_buffer.empty()) {
+        return;
+    }
+
+    _queue_parsed_request_response(fd);
 }
 
 void Server::_write_to_client(int fd) {
@@ -266,8 +261,12 @@ void Server::_write_to_client(int fd) {
     if (conn.write_buffer.empty()) {
         _set_pollout(fd, false);
         if (conn.keep_alive) {
-            conn.read_buffer.clear();
             conn.last_activity = time(NULL);
+            if (!conn.parser.isComplete()) {
+                return;
+            }
+
+            _queue_parsed_request_response(fd);
         } else {
             _close_connection(fd);
         }
@@ -315,5 +314,83 @@ void Server::_check_timeouts() {
     for (size_t i = 0; i < to_close.size(); ++i) {
         Logger::info("Closing idle connection (timeout)");
         _close_connection(to_close[i]);
+    }
+}
+
+bool Server::_queue_parsed_request_response(int fd) {
+    Connection& conn = _connections[fd];
+    HttpRequest req = conn.parser.getRequest();
+    std::string remainder = conn.parser.getRemainder();
+    bool shouldClose = false;
+
+    if (req.httpVersion == "1.0") {
+        shouldClose = true;
+    }
+
+    std::map<std::string, std::string>::const_iterator connectionIt = req.headers.find("connection");
+    if (connectionIt != req.headers.end()) {
+        std::string value = connectionIt->second;
+        for (std::size_t i = 0; i < value.length(); ++i) {
+            value[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(value[i])));
+        }
+        if (value.find("close") != std::string::npos) {
+            shouldClose = true;
+        } else if (req.httpVersion == "1.0" && value.find("keep-alive") != std::string::npos) {
+            shouldClose = false;
+        }
+    }
+
+    conn.keep_alive = !shouldClose;
+    conn.read_buffer = remainder;
+
+    if (req.errorCode != 0) {
+        conn.keep_alive = false;
+        conn.write_buffer = _build_error_response(req.errorCode, true);
+    } else {
+        const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+        conn.write_buffer =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 18\r\n"
+            "Connection: " + conn_header + "\r\n"
+            "\r\n"
+            "Hello, World test!";
+    }
+
+    conn.parser.reset();
+    conn.parser.setMaxBodySize(conn.server_config->client_max_body_size);
+    if (conn.keep_alive && !remainder.empty()) {
+        conn.parser.feed(remainder);
+    }
+
+    _set_pollout(fd, true);
+    return true;
+}
+
+std::string Server::_build_error_response(int statusCode, bool closeConnection) const {
+    std::string reason = _reason_phrase(statusCode);
+    std::string body = reason;
+    std::string connection = closeConnection ? "close" : "keep-alive";
+    std::ostringstream oss;
+
+    oss << "HTTP/1.1 " << statusCode << " " << reason << "\r\n"
+        << "Content-Type: text/plain\r\n"
+        << "Content-Length: " << body.size() << "\r\n"
+        << "Connection: " << connection << "\r\n"
+        << "\r\n"
+        << body;
+    return oss.str();
+}
+
+std::string Server::_reason_phrase(int statusCode) const {
+    switch (statusCode) {
+        case 400:
+            return "Bad Request";
+        case 413:
+            return "Payload Too Large";
+        case 431:
+            return "Request Header Fields Too Large";
+        default:
+            return "Internal Server Error";
     }
 }

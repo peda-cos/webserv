@@ -69,7 +69,7 @@ void ConfigParserLocation::parse_location_methods() {
     parser.validates_directive_value_for("limit_except");
     bool has_at_least_one_method = false;
     while (parser.current_token.type == WORD) {
-        HttpMethod method;
+        HttpMethod method = GET;
         if (parser.current_token.value == "GET") method = GET;
         else if (parser.current_token.value == "POST") method = POST;
         else if (parser.current_token.value == "DELETE") method = DELETE;

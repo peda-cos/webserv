@@ -35,6 +35,9 @@ class Server {
         void _close_connection(int fd);
         void _set_pollout(int fd, bool enable);
         void _check_timeouts();
+        bool _queue_parsed_request_response(int fd);
+        std::string _build_error_response(int statusCode, bool closeConnection) const;
+        std::string _reason_phrase(int statusCode) const;
 
 
 };

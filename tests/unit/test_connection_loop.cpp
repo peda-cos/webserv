@@ -294,7 +294,98 @@ TEST(Protocol, KeepAliveSupport) {
         ASSERT_STR_CONTAINS(buf, "200 OK");
         // Se a conexão fechar após o 1º request, o 2º recv vai falhar.
     }
-    close(fd);
+	close(fd);
+}
+
+/**
+ * TEST: Malformed request returns 400 instead of success
+ */
+TEST(Protocol, MalformedRequestReturns400) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	struct sockaddr_in addr;
+	fill_addr(addr, TEST_HOST, TEST_PORT);
+	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+		close(fd);
+		return;
+	}
+
+	std::string req = "GET / HTTP/1.1\r\n\r\n";
+	send(fd, req.c_str(), req.size(), 0);
+
+	char buf[1024];
+	std::memset(buf, 0, sizeof(buf));
+	ssize_t n = recv(fd, buf, sizeof(buf) - 1, 0);
+	close(fd);
+
+	ASSERT_TRUE(n > 0);
+	ASSERT_STR_CONTAINS(buf, "400 Bad Request");
+}
+
+/**
+ * TEST: Sequential keep-alive requests are reparsed, not reused
+ */
+TEST(Protocol, KeepAliveSequentialRequestsReparsed) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	struct sockaddr_in addr;
+	fill_addr(addr, TEST_HOST, TEST_PORT);
+	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+		close(fd);
+		return;
+	}
+
+	std::string first = "GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	std::string second = "GET /second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+	char buf[1024];
+
+	send(fd, first.c_str(), first.size(), 0);
+	std::memset(buf, 0, sizeof(buf));
+	ssize_t n1 = recv(fd, buf, sizeof(buf) - 1, 0);
+	ASSERT_TRUE(n1 > 0);
+	ASSERT_STR_CONTAINS(buf, "200 OK");
+
+	send(fd, second.c_str(), second.size(), 0);
+	std::memset(buf, 0, sizeof(buf));
+	ssize_t n2 = recv(fd, buf, sizeof(buf) - 1, 0);
+	close(fd);
+
+	ASSERT_TRUE(n2 > 0);
+	ASSERT_STR_CONTAINS(buf, "200 OK");
+	ASSERT_STR_CONTAINS(buf, "Connection: close");
+}
+
+/**
+ * TEST: Pipelined requests both receive responses on one socket
+ */
+TEST(Protocol, PipelinedRequestsOnSingleSocket) {
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	struct sockaddr_in addr;
+	fill_addr(addr, TEST_HOST, TEST_PORT);
+	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+		close(fd);
+		return;
+	}
+
+	std::string req =
+		"GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n"
+		"GET /second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+	send(fd, req.c_str(), req.size(), 0);
+
+	char buf[4096];
+	std::memset(buf, 0, sizeof(buf));
+	ssize_t n = recv(fd, buf, sizeof(buf) - 1, 0);
+	if (n > 0 && std::string(buf, n).find("Connection: close") == std::string::npos) {
+		ssize_t n2 = recv(fd, buf + n, sizeof(buf) - 1 - static_cast<size_t>(n), 0);
+		if (n2 > 0) {
+			n += n2;
+		}
+	}
+	close(fd);
+
+	ASSERT_TRUE(n > 0);
+	std::string response(buf, static_cast<size_t>(n));
+	std::size_t firstPos = response.find("HTTP/1.1 200 OK");
+	ASSERT_TRUE(firstPos != std::string::npos);
+	ASSERT_TRUE(response.find("HTTP/1.1 200 OK", firstPos + 1) != std::string::npos);
 }
 
 /**
@@ -417,7 +508,7 @@ TEST(Connection, ByteByByteSend) {
     fill_addr(addr, TEST_HOST, TEST_PORT);
     connect(fd, (struct sockaddr*)&addr, sizeof(addr));
 
-    std::string small_req = "GET / HTTP/1.1\r\n\r\n";
+	std::string small_req = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
     for (size_t i = 0; i < small_req.size(); ++i) {
         send(fd, &small_req[i], 1, 0);
         usleep(500); 

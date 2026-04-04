@@ -749,7 +749,7 @@ TEST(CgiExecutor, ContentTypeForwarded)
 	   .setUriPath("/test_content_type.py")
 	   .setVersion("HTTP/1.1")
 	   .setBody("json")
-	   .addHeader("Content-Type", "application/json");
+	   .addHeader("content-type", "application/json");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -955,7 +955,7 @@ TEST(CgiExecutor, HttpHeaderForwarding)
 	req.setMethod(GET)
 	   .setUriPath("/test_http_headers.py")
 	   .setVersion("HTTP/1.1")
-	   .addHeader("Host", "example.com");
+	   .addHeader("host", "example.com");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -968,6 +968,56 @@ TEST(CgiExecutor, HttpHeaderForwarding)
 	ASSERT_TRUE(output.find("HOST:") != std::string::npos);
 
 	ScriptFactory::cleanup(script);
+}
+
+/* ========================================================================== */
+/* 25b. Query string in URI does not break CGI path resolution                */
+/* ========================================================================== */
+TEST(CgiExecutor, PathResolutionIgnoresQueryString)
+{
+	if (!ScriptFactory::pythonAvailable()) {
+		ASSERT_TRUE(true);
+		return;
+	}
+
+	std::string code = "import sys\nsys.stdout.write('QUERYPATH:OK')";
+	std::string script = ScriptFactory::createScript("query_path_test.py", code);
+	if (script.empty()) ASSERT_TRUE(false);
+
+	HttpRequest req;
+	req.setMethod(GET)
+	   .setUri("/query_path_test.py?name=value")
+	   .setPath("/query_path_test.py")
+	   .setQueryString("name=value")
+	   .setVersion("HTTP/1.1");
+
+	LocationConfig config;
+	config.root = "/tmp";
+	config.cgi_handlers[".py"] = "/usr/bin/python3";
+
+	CgiExecutor executor;
+	std::string output = executor.execute(req, config);
+	ASSERT_TRUE(output.find("QUERYPATH:OK") != std::string::npos);
+
+	ScriptFactory::cleanup(script);
+}
+
+/* ========================================================================== */
+/* 25c. Missing extension fails with CgiException rather than std exception   */
+/* ========================================================================== */
+TEST(CgiExecutor, MissingExtensionThrowsCgiException)
+{
+	HttpRequest req;
+	req.setMethod(GET)
+	   .setUriPath("/script_without_extension")
+	   .setVersion("HTTP/1.1");
+
+	LocationConfig config;
+	config.root = "/tmp";
+	config.cgi_handlers[".py"] = "/usr/bin/python3";
+
+	CgiExecutor executor;
+	ASSERT_THROWS(executor.execute(req, config), CgiException);
 }
 
 /* ========================================================================== */
@@ -1290,4 +1340,3 @@ TEST(CgiExecutor, RemoteAddrEnvVar)
 }
 
 MINITEST_MAIN()
-

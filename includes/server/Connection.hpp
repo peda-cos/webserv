@@ -4,6 +4,8 @@
 #include <string>
 #include <ctime>
 
+#include <HttpRequestParser.hpp>
+
 struct ServerConfig;
 
 struct Connection {
@@ -13,6 +15,7 @@ struct Connection {
     const ServerConfig*  server_config;
     time_t               last_activity;
     bool                 keep_alive;
+    HttpRequestParser    parser;
 
     Connection() : fd(-1), server_config(NULL), last_activity(0), keep_alive(false) {}
     Connection(int fd, const ServerConfig* cfg)

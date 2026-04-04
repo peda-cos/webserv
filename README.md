@@ -1,4 +1,4 @@
-*jlacerda | peda-cos*
+*jlacerda | lpaula-n | peda-cos*
 
 ## Description
 

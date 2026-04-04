@@ -11,67 +11,10 @@
 #include <string>
 #include <map>
 #include <cstddef>
+#include <sstream>
 
-/* ======================================================================== */
-/*  Stub structures — replace with real includes once production code exists */
-/* ======================================================================== */
-
-struct HttpRequest
-{
-	std::string                        method;
-	std::string                        uri;
-	std::string                        path;
-	std::string                        queryString;
-	std::string                        httpVersion;
-	std::map<std::string, std::string> headers;
-	std::string                        body;
-	int                                errorCode;
-
-	HttpRequest()
-		: method()
-		, uri()
-		, path()
-		, queryString()
-		, httpVersion()
-		, headers()
-		, body()
-		, errorCode(0)
-	{}
-};
-
-class HttpRequestParser
-{
-public:
-	HttpRequestParser()
-		: _maxBodySize(0)
-	{}
-
-	void feed(const std::string& /* data */)
-	{
-		/* stub: no-op */
-	}
-
-	bool isComplete() const
-	{
-		/* stub: always incomplete */
-		return false;
-	}
-
-	HttpRequest getRequest() const
-	{
-		/* stub: return default (empty) request */
-		return HttpRequest();
-	}
-
-	void setMaxBodySize(std::size_t size)
-	{
-		(void)size;
-		/* stub: no-op */
-	}
-
-private:
-	std::size_t _maxBodySize;
-};
+#include "HttpRequest.hpp"
+#include "HttpRequestParser.hpp"
 
 /* ======================================================================== */
 /*  Helper: build a std::string that may contain embedded \r\n              */
@@ -276,6 +219,246 @@ TEST(HttpRequestParser, PipelinedRequests)
 	ASSERT_EQ(S("GET"),    req.method);
 	ASSERT_EQ(S("/first"), req.uri);
 	ASSERT_EQ(0,           req.errorCode);
+}
+
+/* 12. Chunked body exceeding max size in single buffer returns 413 --------- */
+TEST(HttpRequestParser, ChunkedBodyExceedingMaxInSingleBufferReturns413)
+{
+	HttpRequestParser parser;
+	parser.setMaxBodySize(10);
+
+	// Chunked-encoded body: "Hello World!" (12 bytes) encoded as:
+	// "c\r\nHello World!\r\n0\r\n\r\n"
+	std::string chunkedBody = "c\r\nHello World!\r\n0\r\n\r\n";
+	std::ostringstream oss;
+	oss << "POST /upload HTTP/1.1\r\n"
+	    << "Host: localhost\r\n"
+	    << "Transfer-Encoding: chunked\r\n"
+	    << "\r\n"
+	    << chunkedBody;
+
+	parser.feed(oss.str());
+
+	ASSERT_TRUE(parser.isComplete());
+
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(413, req.errorCode);
+}
+
+/* 13. Chunked body within max size in single buffer accepted --------------- */
+TEST(HttpRequestParser, ChunkedBodyWithinMaxInSingleBufferAccepted)
+{
+	HttpRequestParser parser;
+	parser.setMaxBodySize(20);
+
+	// Chunked-encoded body: "Hello World!" (12 bytes) - within limit
+	std::string chunkedBody = "c\r\nHello World!\r\n0\r\n\r\n";
+	std::ostringstream oss;
+	oss << "POST /upload HTTP/1.1\r\n"
+	    << "Host: localhost\r\n"
+	    << "Transfer-Encoding: chunked\r\n"
+	    << "\r\n"
+	    << chunkedBody;
+
+	parser.feed(oss.str());
+
+	ASSERT_TRUE(parser.isComplete());
+
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(0, req.errorCode);
+	ASSERT_EQ(S("Hello World!"), req.body);
+}
+
+/* 14. Headers split across two feed() calls -------------------------------- */
+TEST(HttpRequestParser, HeadersSplitAcrossTwoFeeds)
+{
+	HttpRequestParser parser;
+
+	// First feed: partial headers (no \r\n\r\n yet)
+	parser.feed(S("GET / HTTP/1.1\r\n"
+	              "Host: local"));
+
+	// Should be incomplete after first feed
+	ASSERT_FALSE(parser.isComplete());
+	HttpRequest req1 = parser.getRequest();
+	ASSERT_EQ(0, req1.errorCode);
+
+	// Second feed: complete the headers
+	parser.feed(S("host\r\n"
+	              "\r\n"));
+
+	// Should be complete now
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req2 = parser.getRequest();
+	ASSERT_EQ(0, req2.errorCode);
+	ASSERT_EQ(S("GET"), req2.method);
+	ASSERT_EQ(S("/"), req2.uri);
+	ASSERT_EQ(S("1.1"), req2.httpVersion);
+}
+
+/* 15. Content-Length body arriving in two separate feed() calls ------------ */
+TEST(HttpRequestParser, ContentLengthBodySplitAcrossTwoFeeds)
+{
+	HttpRequestParser parser;
+
+	// First feed: headers + partial body
+	parser.feed(S("POST /submit HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Content-Length: 10\r\n"
+	              "\r\n"
+	              "Hello"));
+
+	// Should be incomplete - only 5 of 10 body bytes received
+	ASSERT_FALSE(parser.isComplete());
+	HttpRequest req1 = parser.getRequest();
+	ASSERT_EQ(0, req1.errorCode);
+
+	// Second feed: remaining body bytes
+	parser.feed(S("World"));
+
+	// Should be complete now
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req2 = parser.getRequest();
+	ASSERT_EQ(0, req2.errorCode);
+	ASSERT_EQ(S("POST"), req2.method);
+	ASSERT_EQ(S("/submit"), req2.uri);
+	// Body should NOT be duplicated - should be exactly "HelloWorld"
+	ASSERT_EQ(S("HelloWorld"), req2.body);
+}
+
+/* 16. Chunked body split across multiple feed() calls ---------------------- */
+TEST(HttpRequestParser, ChunkedBodySplitAcrossMultipleFeeds)
+{
+	HttpRequestParser parser;
+
+	// First feed: headers + first chunk size + partial data
+	parser.feed(S("POST /data HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Transfer-Encoding: chunked\r\n"
+	              "\r\n"
+	              "7\r\n"
+	              "Moz"));
+
+	// Should be incomplete - chunked body not complete
+	ASSERT_FALSE(parser.isComplete());
+
+	// Second feed: rest of first chunk + second chunk + terminator
+	parser.feed(S("illa\r\n"
+	              "9\r\n"
+	              "Developer\r\n"
+	              "0\r\n"
+	              "\r\n"));
+
+	// Should be complete now
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(0, req.errorCode);
+	ASSERT_EQ(S("POST"), req.method);
+	ASSERT_EQ(S("/data"), req.uri);
+	ASSERT_EQ(S("MozillaDeveloper"), req.body);
+}
+
+/* 17. Duplicate matching Content-Length values are accepted ----------------- */
+TEST(HttpRequestParser, DuplicateMatchingContentLengthAccepted)
+{
+	HttpRequestParser parser;
+	parser.feed(S("POST /dup HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Content-Length: 5\r\n"
+	              "Content-Length: 5\r\n"
+	              "\r\n"
+	              "Hello"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(0, req.errorCode);
+	ASSERT_EQ(S("Hello"), req.body);
+}
+
+/* 18. Duplicate conflicting Content-Length values are rejected ------------- */
+TEST(HttpRequestParser, DuplicateConflictingContentLengthRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("POST /dup HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Content-Length: 5\r\n"
+	              "Content-Length: 6\r\n"
+	              "\r\n"
+	              "Hello!"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(400, req.errorCode);
+}
+
+/* 19. Duplicate Host header is rejected ------------------------------------ */
+TEST(HttpRequestParser, DuplicateHostRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET / HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Host: backup\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(400, req.errorCode);
+}
+
+/* 20. Invalid HTTP version is rejected ------------------------------------- */
+TEST(HttpRequestParser, InvalidHttpVersionRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET / HTTP/banana\r\n"
+	              "Host: localhost\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	HttpRequest req = parser.getRequest();
+	ASSERT_EQ(400, req.errorCode);
+}
+
+/* 21. Parser reset clears state but preserves reuse support ----------------- */
+TEST(HttpRequestParser, ResetAllowsReuse)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(S("/first"), parser.getRequest().uri);
+
+	parser.reset();
+	parser.feed(S("GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(S("/second"), parser.getRequest().uri);
+}
+
+/* 22. Pipelined requests expose remainder for next cycle -------------------- */
+TEST(HttpRequestParser, PipelinedRequestsExposeRemainder)
+{
+	HttpRequestParser parser;
+	parser.feed(S("GET /first HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "\r\n"
+	              "GET /second HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(S("GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n"), parser.getRemainder());
+}
+
+/* 23. Unsupported transfer-encoding is rejected ---------------------------- */
+TEST(HttpRequestParser, UnsupportedTransferEncodingRejected)
+{
+	HttpRequestParser parser;
+	parser.feed(S("POST /data HTTP/1.1\r\n"
+	              "Host: localhost\r\n"
+	              "Transfer-Encoding: gzip\r\n"
+	              "\r\n"));
+
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(400, parser.getRequest().errorCode);
 }
 
 /* ======================================================================== */

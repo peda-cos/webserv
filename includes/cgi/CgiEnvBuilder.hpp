@@ -14,7 +14,7 @@ class CgiEnvBuilder {
 
         void build_envp();
         void build_headers_envs(const HttpRequest& request);
-        void build_query_string_env(const StringMap& params);
+        void build_query_string_env(const HttpRequest& request);
         void build_envs_for_post_request(const HttpRequest& request);
         void build_fundamental_envs(const HttpRequest& request);
     

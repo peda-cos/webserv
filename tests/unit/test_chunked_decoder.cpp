@@ -3,48 +3,15 @@
 /*                                                                            */
 /*  Compile:                                                                  */
 /*    c++ -std=c++98 -Wall -Wextra -Werror -I tests/framework                */
-/*        tests/unit/test_chunked_decoder.cpp -o test_chunked_decoder         */
+/*        -I includes tests/unit/test_chunked_decoder.cpp -o test_chunked_decoder */
 /* ************************************************************************** */
 
 #include "minitest.hpp"
 
+#include <ChunkedDecoder.hpp>
+
 #include <string>
 #include <stdexcept>
-
-/* ===== STUBS — replace with real includes once implemented =============== */
-/* These stubs define the expected API surface for the chunked decoder.       */
-/* They will fail tests deterministically until real implementation exists.   */
-
-class ChunkedDecodeException : public std::runtime_error {
-public:
-	explicit ChunkedDecodeException(const std::string& msg)
-		: std::runtime_error(msg) {}
-};
-
-class ChunkedDecoder {
-public:
-	void feed(const std::string& data) {
-		(void)data;
-		/* Stub: no-op */
-	}
-
-	bool isComplete() const {
-		/* Stub: always returns false */
-		return false;
-	}
-
-	std::string getBody() const {
-		/* Stub: always returns empty string */
-		return std::string();
-	}
-
-	bool hasError() const {
-		/* Stub: always returns false */
-		return false;
-	}
-};
-
-/* ===== END STUBS ======================================================== */
 
 /* ------------------------------------------------------------------------ */
 /* 1. A single chunk followed by the terminator must produce the correct    */
@@ -116,6 +83,40 @@ TEST(ChunkedDecoder, TruncatedChunkAwaitsMore)
 
 	ASSERT_FALSE(decoder.isComplete());
 	ASSERT_FALSE(decoder.hasError());
+}
+
+/* ------------------------------------------------------------------------ */
+/* 7. Trailing bytes after the terminator are preserved as remainder.        */
+/* ------------------------------------------------------------------------ */
+TEST(ChunkedDecoder, PreservesRemainderAfterDone)
+{
+	ChunkedDecoder decoder;
+	decoder.feed("5\r\nhello\r\n0\r\n\r\nNEXT");
+
+	ASSERT_TRUE(decoder.isComplete());
+	ASSERT_EQ(std::string("NEXT"), decoder.getRemainder());
+}
+
+/* ------------------------------------------------------------------------ */
+/* 8. Trailer headers after the zero chunk are skipped before completion.    */
+/* ------------------------------------------------------------------------ */
+TEST(ChunkedDecoder, SupportsTrailerHeaders)
+{
+	ChunkedDecoder decoder;
+	decoder.feed("5\r\nhello\r\n0\r\nX-Test: yes\r\n\r\n");
+
+	ASSERT_TRUE(decoder.isComplete());
+	ASSERT_EQ(std::string("hello"), decoder.getBody());
+}
+
+/* ------------------------------------------------------------------------ */
+/* 9. Configured max body size fails oversized decoded bodies.               */
+/* ------------------------------------------------------------------------ */
+TEST(ChunkedDecoder, BodyTooLargeThrowsSpecificException)
+{
+	ChunkedDecoder decoder;
+	decoder.setMaxBodySize(4);
+	ASSERT_THROWS(decoder.feed("5\r\nhello\r\n0\r\n\r\n"), ChunkedBodyTooLargeException);
 }
 
 MINITEST_MAIN()
