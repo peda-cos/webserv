@@ -12,12 +12,7 @@
 #include <sys/stat.h>
 #include <CgiEnvBuilder.hpp>
 
-// TODO: Nos returns do metodo onde deveria ocorrer falha, como tratar?
-// Lançar exception? E o HTTP usa try/catch? 
-// Como vai se integrar ao Http?
-// Retornar um objeto com flag de error e body, ou vai lancar exception? E o HTTP usa try/catch?
-
-std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& location_config)
+CgiResult CgiExecutor::execute(const HttpRequest& request, LocationConfig& location_config)
 {
     CgiPipeManager pipe;
     const std::string& request_path = request.path.empty() ? request.uri : request.path;
@@ -32,12 +27,14 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
     std::string cgi_script_path = location_config.root + request_path;
 
     if (cgi_interpreter.empty()) {
-        throw CgiException("No CGI handler configured for extension: " + file_extension);
+        std::string error_msg = "No CGI handler configured for extension: " + file_extension;
+        return CgiResult(CgiResult::NO_HANDLER, error_msg);
     }
 
     pid_t pid = fork();
     if (pid == -1) {
-        throw CgiException("Failed to fork process");
+        std::string error_msg = "Failed to fork process: " + std::string(strerror(errno));
+        return CgiResult(CgiResult::EXECUTION_ERROR, error_msg);
     }
     if (pid == 0) {
         pipe.setup_child_process();
@@ -45,7 +42,6 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
         CgiEnvBuilder env_builder(request);
         execve(args[0], (char* const*)args, env_builder.getEnvp());
 
-        // execve failed, exit with error code
         exit(127);
     }
     pipe.setup_parent_process();
@@ -56,15 +52,18 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
     try {
         output = pipe.read_from_child(pid);
     } catch(const CgiException& e) {
-        throw;
+        std::string error_msg = "CGI execution error: " + std::string(e.what());
+        return CgiResult(CgiResult::EXECUTION_ERROR, error_msg);
     }
 
     int status;
     waitpid(pid, &status, 0);
     
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-        throw CgiException("CGI script exited with code: " + StringUtils::to_string(WEXITSTATUS(status)));
+        std::string error_msg = "CGI script exited with code: "
+            + StringUtils::to_string(WEXITSTATUS(status));
+        return CgiResult(CgiResult::EXECUTION_ERROR, error_msg);
     }
-    Logger::info("CGI script executed successfully");
-    return output;
+
+    return CgiResult(CgiResult::SUCCESS, output);
 }
