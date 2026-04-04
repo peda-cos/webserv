@@ -12,6 +12,11 @@
 #include <sys/stat.h>
 #include <CgiEnvBuilder.hpp>
 
+// TODO: Nos returns do metodo onde deveria ocorrer falha, como tratar?
+// Lançar exception? E o HTTP usa try/catch? 
+// Como vai se integrar ao Http?
+// Retornar um objeto com flag de error e body, ou vai lancar exception? E o HTTP usa try/catch?
+
 std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& location_config)
 {
     CgiPipeManager pipe;
@@ -30,7 +35,7 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
         throw CgiException("No CGI handler configured for extension: " + file_extension);
     }
 
-    pid = fork();
+    pid_t pid = fork();
     if (pid == -1) {
         throw CgiException("Failed to fork process");
     }
@@ -40,18 +45,23 @@ std::string CgiExecutor::execute(const HttpRequest& request, LocationConfig& loc
         CgiEnvBuilder env_builder(request);
         execve(args[0], (char* const*)args, env_builder.getEnvp());
 
-        throw CgiException("Execve failed: " + std::string(strerror(errno)));
+        // execve failed, exit with error code
+        exit(127);
     }
     pipe.setup_parent_process();
     std::string data = request.method == "POST" ? request.body : "";
     pipe.write_to_child(data);
 
+    std::string output = "";
+    try {
+        output = pipe.read_from_child(pid);
+    } catch(const CgiException& e) {
+        throw;
+    }
+
     int status;
     waitpid(pid, &status, 0);
-    std::string output = pipe.read_from_child();
-
-    // TODO: adicionar tratamento de resposta CGI (Como vai se integrar ao Http?)
-    // Retornar um objeto com flag de error e body, ou vai lancar exception? E o HTTP usa try/catch?
+    
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
         throw CgiException("CGI script exited with code: " + StringUtils::to_string(WEXITSTATUS(status)));
     }

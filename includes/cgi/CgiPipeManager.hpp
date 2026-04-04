@@ -2,6 +2,7 @@
 #define CGI_PIPE_MANAGER_HPP
 
 #include <string>
+#include <sys/types.h>
 #include <HttpRequest.hpp>
 
 class CgiPipeManager {
@@ -14,7 +15,8 @@ class CgiPipeManager {
         void setup_child_process() const;
         void setup_parent_process() const;
         void write_to_child(const std::string& data) const;
-        std::string read_from_child() const;
+        std::string read_from_child(pid_t pid) const;
+        int handle_timeout() const;
 };
 
 #endif
