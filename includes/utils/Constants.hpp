@@ -12,4 +12,6 @@
 
 #define CARRIAGE_RETURN_LINE_FEED "\r\n"
 
+#define CGI_TIMEOUT_SECONDS 3
+
 #endif

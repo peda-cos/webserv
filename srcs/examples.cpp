@@ -77,13 +77,17 @@ void testConfigParser(std::string config_source) {
 #include <CgiExecutor.hpp>
 #include <CgiEnvBuilder.hpp>
 #include <HttpRequest.hpp>
+#include <sstream>
 
 void testCGIExecutor() {
     HttpRequest http_request;
 
     http_request.setMethod("POST")
-                .setUri("/cgi/script.py")
+                .setUri("http://localhost/cgi/script.py/extra/path?name=value")
+                .setPath("/cgi/script.py/extra/path")
+                .setQueryString("name=value")
                 .setHttpVersion("1.1")
+                .setClientIp("192.168.1.100")
                 .addHeader("Host", "localhost")
                 .addHeader("User-Agent", "Mozilla/5.0")
                 .addHeader("Content-Type", "application/x-www-form-urlencoded")
@@ -96,6 +100,18 @@ void testCGIExecutor() {
     location_config.cgi_handlers[".py"] = "/usr/bin/python3";
 
     CgiExecutor executor;
-    std::string cgi_output = executor.execute(http_request, location_config);
-    Logger::info("CGI Output:\n" + cgi_output);
+    CgiResult result = executor.execute(http_request, location_config);
+    std::stringstream ss;
+    ss << "CGI Execution Result:" << std::endl;
+    ss << "  Status: ";
+    switch (result.status) {
+        case CgiResult::SUCCESS: ss << "SUCCESS"; break;
+        case CgiResult::TIMEOUT: ss << "TIMEOUT"; break;
+        case CgiResult::EXECUTION_ERROR: ss << "EXECUTION_ERROR"; break;
+        case CgiResult::NOT_FOUND: ss << "NOT_FOUND"; break;
+        case CgiResult::NO_HANDLER: ss << "NO_HANDLER"; break;
+    }
+    ss << std::endl;
+    ss << "  Output: " << std::endl << result.output << std::endl;
+    Logger::info(ss.str());
 }

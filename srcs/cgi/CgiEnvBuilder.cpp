@@ -3,15 +3,49 @@
 #include <CgiUtils.hpp>
 #include <sstream>
 
-void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request) {
-    env_map["SERVER_PROTOCOL"] = "HTTP/" + request.httpVersion;
-    env_map["SERVER_SOFTWARE"] = "Webserv/1.0"; // TODO: tornar dinâmico com base no nome do servidor e versão, como ?
+UriPathParts CgiEnvBuilder::extract_path_parts(const HttpRequest& request, const LocationConfig& location) {
+    UriPathParts parts;
+    const std::string& request_path = request.path.empty() ? request.uri : request.path;
+    
+    std::size_t dotPos = request_path.rfind('.');
+    if (dotPos == std::string::npos) {
+        parts.script_name = request_path;
+        parts.path_info = "";
+        return parts;
+    }
+    
+    std::size_t slash_pos = request_path.find('/', dotPos);
+    if (slash_pos == std::string::npos) {
+        slash_pos = request_path.length();
+    }
+    
+    std::string extension = request_path.substr(dotPos, slash_pos - dotPos);
+    
+    if (location.cgi_handlers.find(extension) != location.cgi_handlers.end()) {
+        parts.script_name = request_path.substr(0, slash_pos);
+        parts.path_info = request_path.substr(slash_pos);
+    } else {
+        parts.script_name = request_path;
+        parts.path_info = "";
+    }
+    
+    return parts;
+}
+
+void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const LocationConfig& location) {
+    std::string server_protocol = "HTTP/" + request.httpVersion;
+    env_map["SERVER_PROTOCOL"] = server_protocol;
+    
+    env_map["SERVER_SOFTWARE"] = "Webserv/1.0";
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
-    env_map["SCRIPT_NAME"] = request.path.empty() ? request.uri : request.path;
+
     env_map["REQUEST_METHOD"] = request.method;
     env_map["REQUEST_URI"] = request.uri;
-    env_map["PATH_INFO"] = "PENDENTE"; // TODO: Entender melhor essa variável e como preenchê-la corretamente
-    env_map["REMOTE_ADDR"] = "PENDENTE"; // TODO: Obter o endereço IP do cliente a partir do socket de conexão
+    env_map["REMOTE_ADDR"] = request.client_ip;
+
+    UriPathParts path_parts = extract_path_parts(request, location);
+    env_map["SCRIPT_NAME"] = path_parts.script_name;
+    env_map["PATH_INFO"] = path_parts.path_info;
 }
 
 
@@ -23,9 +57,12 @@ void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
     std::stringstream content_length_stream;
     content_length_stream << request.body.size();
     env_map["CONTENT_LENGTH"] = content_length_stream.str();
-    StringMapIterator content_type_it = request.headers.find("content-type");
-    if (content_type_it != request.headers.end()) {
-        env_map["CONTENT_TYPE"] = content_type_it->second;
+    StringMapIterator it;
+    for (it = request.headers.begin(); it != request.headers.end(); ++it) {
+        if (CgiUtils::env_normalize(it->first) == "CONTENT_TYPE") break;
+    }
+    if (it != request.headers.end()) {
+        env_map["CONTENT_TYPE"] = it->second;
     }
 }
 
@@ -50,8 +87,8 @@ void CgiEnvBuilder::build_envp() {
     envp[index] = NULL;
 }
 
-CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request) : envp(NULL) {
-    build_fundamental_envs(request);
+CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location) : envp(NULL) {
+    build_fundamental_envs(request, location);
     build_query_string_env(request);
     if (request.method == "POST") {
         build_envs_for_post_request(request);
