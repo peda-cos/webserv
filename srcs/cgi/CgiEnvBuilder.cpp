@@ -3,15 +3,30 @@
 #include <CgiUtils.hpp>
 #include <sstream>
 
-void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request) {
-    env_map["SERVER_PROTOCOL"] = "HTTP/" + request.httpVersion;
-    env_map["SERVER_SOFTWARE"] = "Webserv/1.0"; // TODO: tornar dinâmico com base no nome do servidor e versão, como ?
+std::string CgiEnvBuilder::extract_path_info(const std::string& uri_path, const LocationConfig& location) {
+    for (StringMapIterator it = location.cgi_handlers.begin(); it != location.cgi_handlers.end(); ++it) {
+        const std::string& extension = it->first;
+        size_t ext_pos = uri_path.find(extension);
+        if (ext_pos != std::string::npos) {
+            size_t path_info_start = ext_pos + extension.length();
+            if (path_info_start < uri_path.length()) {
+                return uri_path.substr(path_info_start);
+            }
+            return "";
+        }
+    }
+    return "";
+}
+
+void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const LocationConfig& location) {
+    env_map["SERVER_PROTOCOL"] = request.version;
+    env_map["SERVER_SOFTWARE"] = "Webserv/1.0";
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
-    env_map["SCRIPT_NAME"] = request.path.empty() ? request.uri : request.path;
-    env_map["REQUEST_METHOD"] = request.method;
-    env_map["REQUEST_URI"] = request.uri;
-    env_map["PATH_INFO"] = "PENDENTE"; // TODO: Entender melhor essa variável e como preenchê-la corretamente
-    env_map["REMOTE_ADDR"] = "PENDENTE"; // TODO: Obter o endereço IP do cliente a partir do socket de conexão
+    env_map["SCRIPT_NAME"] = request.uri_path;
+    env_map["REQUEST_METHOD"] = HttpUtils::method_to_string(request.method);
+    env_map["REQUEST_URI"] = request.uri_path;
+    env_map["PATH_INFO"] = extract_path_info(request.uri_path, location);
+    env_map["REMOTE_ADDR"] = request.client_ip;
 }
 
 
@@ -50,8 +65,8 @@ void CgiEnvBuilder::build_envp() {
     envp[index] = NULL;
 }
 
-CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request) : envp(NULL) {
-    build_fundamental_envs(request);
+CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location) : envp(NULL) {
+    build_fundamental_envs(request, location);
     build_query_string_env(request);
     if (request.method == "POST") {
         build_envs_for_post_request(request);

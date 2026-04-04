@@ -88,6 +88,11 @@ HttpRequest& HttpRequest::addHeader(std::string key, std::string value) {
     return *this;
 }
 
+HttpRequest& HttpRequest::setClientIp(std::string client_ip) {
+    this->client_ip = client_ip;
+    return *this;
+}
+
 HttpRequest& HttpRequest::addQueryParameter(std::string key, std::string value) {
     if (!this->queryString.empty()) {
         this->queryString += "&";

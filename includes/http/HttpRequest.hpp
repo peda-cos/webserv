@@ -12,6 +12,7 @@ class HttpRequest {
         std::string path;
         std::string queryString;
         std::string httpVersion;
+        std::string client_ip;
         std::map<std::string, std::string> headers;
         std::string body;
         int errorCode;
@@ -26,6 +27,7 @@ class HttpRequest {
         HttpRequest& setQueryString(std::string queryString);
         HttpRequest& setHttpVersion(std::string httpVersion);
         HttpRequest& setVersion(std::string httpVersion);
+        HttpRequest& setClientIp(std::string client_ip);
         HttpRequest& addHeader(std::string key, std::string value);
         HttpRequest& addQueryParameter(std::string key, std::string value);
         void setErrorCode(int code);

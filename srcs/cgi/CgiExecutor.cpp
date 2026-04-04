@@ -38,8 +38,11 @@ CgiResult CgiExecutor::execute(const HttpRequest& request, LocationConfig& locat
     }
     if (pid == 0) {
         pipe.setup_child_process();
-        const char* args[] = { cgi_interpreter.c_str(), cgi_script_path.c_str(), NULL };
-        CgiEnvBuilder env_builder(request);
+        const char* args[3];
+        args[0] = cgi_interpreter.c_str();
+        args[1] = cgi_script_path.c_str();
+        args[2] = NULL;
+        CgiEnvBuilder env_builder(request, location_config);
         execve(args[0], (char* const*)args, env_builder.getEnvp());
 
         exit(127);
