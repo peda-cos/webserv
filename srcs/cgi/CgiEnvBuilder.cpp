@@ -3,30 +3,49 @@
 #include <CgiUtils.hpp>
 #include <sstream>
 
-std::string CgiEnvBuilder::extract_path_info(const std::string& uri_path, const LocationConfig& location) {
-    for (StringMapIterator it = location.cgi_handlers.begin(); it != location.cgi_handlers.end(); ++it) {
-        const std::string& extension = it->first;
-        size_t ext_pos = uri_path.find(extension);
-        if (ext_pos != std::string::npos) {
-            size_t path_info_start = ext_pos + extension.length();
-            if (path_info_start < uri_path.length()) {
-                return uri_path.substr(path_info_start);
-            }
-            return "";
-        }
+UriPathParts CgiEnvBuilder::extract_path_parts(const HttpRequest& request, const LocationConfig& location) {
+    UriPathParts parts;
+    const std::string& request_path = request.path.empty() ? request.uri : request.path;
+    
+    std::size_t dotPos = request_path.rfind('.');
+    if (dotPos == std::string::npos) {
+        parts.script_name = request_path;
+        parts.path_info = "";
+        return parts;
     }
-    return "";
+    
+    std::size_t slash_pos = request_path.find('/', dotPos);
+    if (slash_pos == std::string::npos) {
+        slash_pos = request_path.length();
+    }
+    
+    std::string extension = request_path.substr(dotPos, slash_pos - dotPos);
+    
+    if (location.cgi_handlers.find(extension) != location.cgi_handlers.end()) {
+        parts.script_name = request_path.substr(0, slash_pos);
+        parts.path_info = request_path.substr(slash_pos);
+    } else {
+        parts.script_name = request_path;
+        parts.path_info = "";
+    }
+    
+    return parts;
 }
 
 void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const LocationConfig& location) {
-    env_map["SERVER_PROTOCOL"] = request.version;
+    std::string server_protocol = "HTTP/" + request.httpVersion;
+    env_map["SERVER_PROTOCOL"] = server_protocol;
+    
     env_map["SERVER_SOFTWARE"] = "Webserv/1.0";
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
-    env_map["SCRIPT_NAME"] = request.uri_path;
-    env_map["REQUEST_METHOD"] = HttpUtils::method_to_string(request.method);
-    env_map["REQUEST_URI"] = request.uri_path;
-    env_map["PATH_INFO"] = extract_path_info(request.uri_path, location);
+
+    env_map["REQUEST_METHOD"] = request.method;
+    env_map["REQUEST_URI"] = request.uri;
     env_map["REMOTE_ADDR"] = request.client_ip;
+
+    UriPathParts path_parts = extract_path_parts(request, location);
+    env_map["SCRIPT_NAME"] = path_parts.script_name;
+    env_map["PATH_INFO"] = path_parts.path_info;
 }
 
 
@@ -38,9 +57,12 @@ void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
     std::stringstream content_length_stream;
     content_length_stream << request.body.size();
     env_map["CONTENT_LENGTH"] = content_length_stream.str();
-    StringMapIterator content_type_it = request.headers.find("content-type");
-    if (content_type_it != request.headers.end()) {
-        env_map["CONTENT_TYPE"] = content_type_it->second;
+    StringMapIterator it;
+    for (it = request.headers.begin(); it != request.headers.end(); ++it) {
+        if (CgiUtils::env_normalize(it->first) == "CONTENT_TYPE") break;
+    }
+    if (it != request.headers.end()) {
+        env_map["CONTENT_TYPE"] = it->second;
     }
 }
 

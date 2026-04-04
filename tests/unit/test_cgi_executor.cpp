@@ -998,7 +998,8 @@ TEST(CgiExecutor, PathResolutionIgnoresQueryString)
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
 	CgiExecutor executor;
-	std::string output = executor.execute(req, config);
+	CgiResult result = executor.execute(req, config);
+	std::string output = result.output;
 	ASSERT_TRUE(output.find("QUERYPATH:OK") != std::string::npos);
 
 	ScriptFactory::cleanup(script);

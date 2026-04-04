@@ -143,7 +143,7 @@ TEST(CgiEnv, HttpHeadersAreExported)
 	   .addHeader("host", "example.com")
 	   .addHeader("x-custom-header", "abc");
 
-	CgiEnvBuilder builder(req);
+	CgiEnvBuilder builder(req, create_test_location());
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
 	ASSERT_EQ(std::string("example.com"), env["HTTP_HOST"]);
 	ASSERT_EQ(std::string("abc"), env["HTTP_X_CUSTOM_HEADER"]);

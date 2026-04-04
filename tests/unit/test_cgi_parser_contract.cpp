@@ -61,8 +61,8 @@ TEST(CgiParserContract, PathResolutionIgnoresQueryString)
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
 	CgiExecutor executor;
-	std::string output = executor.execute(req, config);
-	ASSERT_TRUE(output.find("OK:QUERY") != std::string::npos);
+	CgiResult result = executor.execute(req, config);
+	ASSERT_TRUE(result.output.find("OK:QUERY") != std::string::npos);
 
 	ScriptFactory::cleanup(script);
 }

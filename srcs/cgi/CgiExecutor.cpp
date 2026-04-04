@@ -22,9 +22,14 @@ CgiResult CgiExecutor::execute(const HttpRequest& request, LocationConfig& locat
         throw CgiException("No CGI handler configured for request path without extension: " + request_path);
     }
 
-    std::string file_extension = request_path.substr(dotPos);
+    std::size_t slashPos = request_path.find('/', dotPos);
+    if (slashPos == std::string::npos) {
+        slashPos = request_path.length();
+    }
+
+    std::string file_extension = request_path.substr(dotPos, slashPos - dotPos);
     std::string cgi_interpreter = location_config.cgi_handlers[file_extension];
-    std::string cgi_script_path = location_config.root + request_path;
+    std::string cgi_script_path = location_config.root + request_path.substr(0, slashPos);
 
     if (cgi_interpreter.empty()) {
         std::string error_msg = "No CGI handler configured for extension: " + file_extension;

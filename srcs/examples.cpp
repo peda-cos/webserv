@@ -83,9 +83,11 @@ void testCGIExecutor() {
     HttpRequest http_request;
 
     http_request.setMethod("POST")
-                .setUri("/cgi/script.py")
+                .setUri("http://localhost/cgi/script.py/extra/path?name=value")
+                .setPath("/cgi/script.py/extra/path")
+                .setQueryString("name=value")
                 .setHttpVersion("1.1")
-                .setClientIp("127.0.0.1")
+                .setClientIp("192.168.1.100")
                 .addHeader("Host", "localhost")
                 .addHeader("User-Agent", "Mozilla/5.0")
                 .addHeader("Content-Type", "application/x-www-form-urlencoded")
