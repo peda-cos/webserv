@@ -52,6 +52,21 @@ Or with the provided Python stress test:
 python3 tests/stress.py
 ```
 
+### Testing Interface (Visual Web UI)
+
+A comprehensive browser-based test interface is provided for validating HTTP server functionality, custom requests, and CGI endpoints.
+
+To use:
+1. Compile and run the server:
+   ```bash
+   make
+   ./webserv config/default.conf
+   ```
+2. Open your browser and navigate to: `http://localhost:8080`
+3. The test interface loads automatically with 21 pre-configured test scenarios covering GET, POST, DELETE, HEAD requests, status codes, errors, and edge cases.
+4. Use **Run All** to execute all tests at once, or run individual scenarios with the **Run** button.
+5. Use the **Request Builder** for custom HTTP requests with headers and body.
+
 ## Resources
 
 ### References

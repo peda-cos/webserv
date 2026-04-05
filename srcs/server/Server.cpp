@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cctype>
 #include <sstream>
+#include <fstream>
 #include <iostream>
 
 #define READ_BUFFER_SIZE        4096
@@ -348,13 +349,7 @@ bool Server::_queue_parsed_request_response(int fd) {
         conn.write_buffer = _build_error_response(req.errorCode, true);
     } else {
         const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
-        conn.write_buffer =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/plain\r\n"
-            "Content-Length: 18\r\n"
-            "Connection: " + conn_header + "\r\n"
-            "\r\n"
-            "Hello, World test!";
+        conn.write_buffer = _serve_static_with_cors(req, conn_header);
     }
 
     conn.parser.reset();
@@ -365,6 +360,53 @@ bool Server::_queue_parsed_request_response(int fd) {
 
     _set_pollout(fd, true);
     return true;
+}
+
+std::string Server::_serve_static_with_cors(const HttpRequest& req, const std::string& conn_header) const {
+    std::ostringstream response;
+    std::string cors_headers = "Access-Control-Allow-Origin: *\r\n"
+                               "Access-Control-Allow-Methods: GET, POST, DELETE, HEAD, PUT, OPTIONS\r\n"
+                               "Access-Control-Allow-Headers: *\r\n";
+                               
+    if (req.method == "OPTIONS") {
+        response << "HTTP/1.1 204 No Content\r\n"
+                 << cors_headers
+                 << "Connection: " << conn_header << "\r\n\r\n";
+    } else {
+        std::string reqPath = req.uri == "/" ? "/index.html" : req.uri;
+        std::string filepath = "www" + reqPath;
+        std::ifstream file(filepath.c_str(), std::ios::binary);
+
+        if (file.is_open()) {
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            std::string content = ss.str();
+            
+            std::string content_type = "application/octet-stream";
+            if (filepath.find(".html") != std::string::npos) content_type = "text/html";
+            else if (filepath.find(".css") != std::string::npos) content_type = "text/css";
+            else if (filepath.find(".js") != std::string::npos) content_type = "application/javascript";
+            else if (filepath.find(".txt") != std::string::npos) content_type = "text/plain";
+            
+            response << "HTTP/1.1 200 OK\r\n"
+                     << cors_headers
+                     << "Content-Type: " << content_type << "\r\n"
+                     << "Content-Length: " << content.length() << "\r\n"
+                     << "Connection: " << conn_header << "\r\n"
+                     << "\r\n"
+                     << content;
+        } else {
+            std::string not_found = "<h1>404 Not Found</h1>";
+            response << "HTTP/1.1 404 Not Found\r\n"
+                     << cors_headers
+                     << "Content-Type: text/html\r\n"
+                     << "Content-Length: " << not_found.length() << "\r\n"
+                     << "Connection: " << conn_header << "\r\n"
+                     << "\r\n"
+                     << not_found;
+        }
+    }
+    return response.str();
 }
 
 std::string Server::_build_error_response(int statusCode, bool closeConnection) const {

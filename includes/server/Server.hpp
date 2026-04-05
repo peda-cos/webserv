@@ -36,6 +36,7 @@ class Server {
         void _set_pollout(int fd, bool enable);
         void _check_timeouts();
         bool _queue_parsed_request_response(int fd);
+        std::string _serve_static_with_cors(const HttpRequest& req, const std::string& conn_header) const;
         std::string _build_error_response(int statusCode, bool closeConnection) const;
         std::string _reason_phrase(int statusCode) const;
 

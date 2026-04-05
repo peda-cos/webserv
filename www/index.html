@@ -3,10 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>webserv - Default Page</title>
+    <title>WebServ Test Interface</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>webserv is running</h1>
-    <p>This is the default page for the webserv HTTP server.</p>
+
+    <header>
+        <h1>🚀 WebServ Test Interface</h1>
+        <div class="settings-bar">
+            <button id="btn-theme-toggle" title="Toggle Dark/Light Mode">🌙</button>
+            <div>
+                <label for="config-host">Host:</label>
+                <input type="text" id="config-host" value="127.0.0.1" style="width: 120px;">
+            </div>
+            <div>
+                <label for="config-port">Port:</label>
+                <input type="number" id="config-port" value="8080" style="width: 80px;">
+            </div>
+            <div>
+                <label for="config-timeout">Timeout (s):</label>
+                <input type="number" id="config-timeout" value="5" min="1" max="30" style="width: 60px;">
+            </div>
+            <button id="btn-save-config">Save</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        
+        <!-- SCENARIOS PANEL -->
+        <div class="panel left-panel">
+            <div class="panel-header">
+                <span>📋 Test Scenarios</span>
+                <div>
+                    <button id="btn-run-all" class="primary">▶ Run All</button>
+                    <button id="btn-clear-scenarios">🔄 Clear</button>
+                </div>
+            </div>
+            <div id="stats-panel" class="panel-stats" style="display: none;">
+                <div class="stat-item pending"><span>⏳</span> <span id="stat-pending">0</span> Pending</div>
+                <div class="stat-item success"><span>✅</span> <span id="stat-pass">0</span> Passed</div>
+                <div class="stat-item error"><span>❌</span> <span id="stat-fail">0</span> Failed</div>
+            </div>
+            <div class="panel-content" id="scenarios-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- REQUEST / RESPONSE PANEL -->
+        <div class="panel right-panel">
+            
+            <div class="panel-header" style="border-bottom: 0;">
+                <span>🛠️ Request Builder</span>
+            </div>
+            
+            <div class="panel-content" style="display: flex; flex-direction: column;">
+                <!-- Request Builder Section -->
+                <div class="request-builder">
+                    <form id="request-form" onsubmit="event.preventDefault(); window.Interface.sendFreeRequest();">
+                        <div class="request-line">
+                            <select id="req-method">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                                <option value="DELETE">DELETE</option>
+                                <option value="HEAD">HEAD</option>
+                                <option value="PUT">PUT</option>
+                            </select>
+                            <input type="text" id="req-path" value="/" placeholder="Path (e.g., /index.html)" style="font-family: monospace;">
+                            <button type="submit" class="success" style="width: 120px;">Send 🚀</button>
+                        </div>
+                        
+                        <div id="content-headers" class="tab-content active">
+                            <div style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">Headers</div>
+                            <div class="headers-list" id="req-headers-list">
+                                <div class="header-row">
+                                    <input type="text" placeholder="Header Name" value="User-Agent" class="hdr-name">
+                                    <input type="text" placeholder="Value" value="WebServ-Test/1.0" class="hdr-val">
+                                    <button type="button" onclick="this.parentElement.remove()">×</button>
+                                </div>
+                                <div class="header-row">
+                                    <input type="text" placeholder="Header Name" value="Accept" class="hdr-name">
+                                    <input type="text" placeholder="Value" value="*/*" class="hdr-val">
+                                    <button type="button" onclick="this.parentElement.remove()">×</button>
+                                </div>
+                            </div>
+                            <button type="button" onclick="window.Interface.addHeaderRow()" style="align-self: flex-start; margin-top: 8px;">+ Add Header</button>
+                        </div>
+                        
+                        <div id="content-body" class="tab-content">
+                            <div style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">Body</div>
+                            <div class="body-options">
+                                <label><input type="radio" name="bodyType" value="plain" checked> Plain Text</label>
+                                <label><input type="radio" name="bodyType" value="json"> JSON</label>
+                                <label><input type="radio" name="bodyType" value="form"> Form Data (urlencoded)</label>
+                            </div>
+                            <div class="body-editor">
+                                <textarea id="req-body" placeholder="Request body here..."></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div> <!-- End Request Builder -->
+
+                <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 10px 0;">
+
+                <!-- Response Viewer Section -->
+                <div class="panel-header" style="padding-left: 0; padding-right: 0; background: none;">
+                    <span>📥 Response Viewer</span>
+                    <span id="resp-target-url" style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted); font-family: monospace;"></span>
+                </div>
+                
+                <div class="response-viewer" id="response-container">
+                    <div class="empty-state">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">📫</div>
+                        <div>Send a request to see the response here</div>
+                    </div>
+                </div> <!-- End Response Viewer -->
+
+            </div>
+        </div>
+
+    </div>
+    <script src="app.js"></script>
 </body>
 </html>

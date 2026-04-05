@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebServ Health Check</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        .status-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .status {
+            display: inline-block;
+            background: #4caf50;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        .details {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 13px;
+            color: #333;
+            margin-top: 20px;
+        }
+        .detail-line {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .detail-line:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            color: #666;
+            font-weight: 600;
+        }
+        .detail-value {
+            color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="status-icon">✅</div>
+        <h1>WebServ Health Check</h1>
+        <div class="status">HTTP 200 OK - Server Operational</div>
+        <p>The WebServ HTTP/1.1 server is running and responding to requests.</p>
+        <p>This is the system health check endpoint that validates server connectivity and basic HTTP functionality.</p>
+        
+        <div class="details">
+            <div class="detail-line">
+                <span class="detail-label">Status:</span>
+                <span class="detail-value">Operational</span>
+            </div>
+            <div class="detail-line">
+                <span class="detail-label">Server:</span>
+                <span class="detail-value">WebServ 1.0</span>
+            </div>
+            <div class="detail-line">
+                <span class="detail-label">Protocol:</span>
+                <span class="detail-value">HTTP/1.1</span>
+            </div>
+            <div class="detail-line">
+                <span class="detail-label">Response:</span>
+                <span class="detail-value">200 OK</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
