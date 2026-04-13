@@ -29,18 +29,13 @@ CgiResult CgiExecutor::execute(const HttpRequest& request, const LocationConfig&
 {
     CgiPipeManager pipe;
     const std::string& request_path = request.path.empty() ? request.uri : request.path;
-    std::size_t dot_pos = request_path.rfind('.');
+    std::string file_extension;
+    std::size_t slash_pos = 0;
 
-    if (dot_pos == std::string::npos) {
+    if (!CgiUtils::extract_extension(request_path, file_extension, slash_pos)) {
         throw CgiException("Request path does not contain an extension: " + request_path);
     }
 
-    std::size_t slash_pos = request_path.find('/', dot_pos);
-    if (slash_pos == std::string::npos) {
-        slash_pos = request_path.length();
-    }
-
-    std::string file_extension = request_path.substr(dot_pos, slash_pos - dot_pos);
     std::map<std::string, std::string>::const_iterator handler_it = location_config.cgi_handlers.find(file_extension);
     if (handler_it == location_config.cgi_handlers.end()) {
         std::string error_msg = "No CGI handler configured for extension: " + file_extension;

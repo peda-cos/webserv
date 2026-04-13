@@ -60,3 +60,20 @@ std::string CgiUtils::absolute_path(const std::string& path) {
 
     return join_paths(std::string(cwd_buffer), path);
 }
+
+bool CgiUtils::extract_extension(const std::string& request_path,
+    std::string& extension, size_t& slash_pos)
+{
+    size_t dot_pos = request_path.rfind('.');
+    if (dot_pos == std::string::npos) {
+        return false;
+    }
+
+    slash_pos = request_path.find('/', dot_pos);
+    if (slash_pos == std::string::npos) {
+        slash_pos = request_path.length();
+    }
+
+    extension = request_path.substr(dot_pos, slash_pos - dot_pos);
+    return true;
+}

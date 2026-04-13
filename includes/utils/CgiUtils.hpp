@@ -12,6 +12,8 @@ class CgiUtils {
         static std::string resolve_script_path(const std::string& request_script_path,
             const LocationConfig& location_config);
         static std::string absolute_path(const std::string& path);
+        static bool extract_extension(const std::string& request_path,
+            std::string& extension, size_t& slash_pos);
 };
 
 #endif

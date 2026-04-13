@@ -131,6 +131,7 @@ $(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWO
 		-o $@ $< \
 		../srcs/server/Server.cpp \
 		../srcs/utils/Logger.cpp \
+		../srcs/utils/CgiUtils.cpp \
 		../srcs/config/ConfigLexer.cpp \
 		../srcs/config/ConfigParser.cpp \
 		../srcs/config/ConfigParserServer.cpp \
@@ -139,8 +140,13 @@ $(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWO
 		../srcs/utils/ConfigUtils.cpp \
 		../srcs/utils/HttpUtils.cpp \
 		../srcs/utils/StringUtils.cpp \
+		../srcs/utils/ParsingUtils.cpp \
 		../srcs/http/HttpRequest.cpp \
 		../srcs/http/HttpRequestParser.cpp \
+		../srcs/http/HttpResponse.cpp \
 		../srcs/http/ChunkedDecoder.cpp \
 		../srcs/utils/ParserDirectiveUtils.cpp \
-		../srcs/utils/ParsingUtils.cpp
+		../srcs/cgi/CgiHandler.cpp \
+		../srcs/cgi/CgiExecutor.cpp \
+		../srcs/cgi/CgiEnvBuilder.cpp \
+		../srcs/cgi/CgiPipeManager.cpp

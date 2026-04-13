@@ -24,15 +24,6 @@ namespace {
             default: return "Internal Server Error";
         }
     }
-
-    static std::string to_lower_copy(const std::string& value)
-    {
-        std::string lower = value;
-        for (std::size_t i = 0; i < lower.length(); ++i) {
-            lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lower[i])));
-        }
-        return lower;
-    }
 }
 
 HttpResponse::HttpResponse() : status_code(200), body(), headers() {}
@@ -74,7 +65,7 @@ std::string HttpResponse::toString() const
 
     bool has_content_length = false;
     for (std::size_t i = 0; i < headers.size(); ++i) {
-        std::string lower_key = to_lower_copy(headers[i].first);
+        std::string lower_key = StringUtils::to_lower(headers[i].first);
         if (lower_key == "content-length") {
             has_content_length = true;
         }

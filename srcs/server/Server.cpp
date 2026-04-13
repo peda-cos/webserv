@@ -2,6 +2,7 @@
 #include <Logger.hpp>
 #include <HttpRequest.hpp>
 #include <HttpResponse.hpp>
+#include <StringUtils.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -22,14 +23,6 @@
 #define CONNECTION_TIMEOUT_SEC  5
 
 namespace {
-    static std::string to_lower_copy(const std::string& value) {
-        std::string lower = value;
-        for (std::size_t i = 0; i < lower.length(); ++i) {
-            lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lower[i])));
-        }
-        return lower;
-    }
-
     static void append_cors_headers(HttpResponse& response) {
         response.addHeader("Access-Control-Allow-Origin", "*");
         response.addHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, HEAD, PUT, OPTIONS");
@@ -152,7 +145,7 @@ void Server::run() {
         int ready = poll(&_poll_fds[0], _poll_fds.size(), CONNECTION_TIMEOUT_SEC * 1000);
 
         if (ready < 0) {
-            Logger::error("poll() failed — stopping server");
+            Logger::error("poll failed — stopping server");
             break;
         }
 
@@ -347,10 +340,7 @@ bool Server::_queue_parsed_request_response(int fd) {
 
     std::map<std::string, std::string>::const_iterator connectionIt = req.headers.find("connection");
     if (connectionIt != req.headers.end()) {
-        std::string value = connectionIt->second;
-        for (std::size_t i = 0; i < value.length(); ++i) {
-            value[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(value[i])));
-        }
+        std::string value = StringUtils::to_lower(connectionIt->second);
         if (value.find("close") != std::string::npos) {
             shouldClose = true;
         } else if (req.httpVersion == "1.0" && value.find("keep-alive") != std::string::npos) {
@@ -372,7 +362,7 @@ bool Server::_queue_parsed_request_response(int fd) {
 
         bool has_content_type = false;
         for (size_t i = 0; i < cgi_output.headers.size(); ++i) {
-            std::string key_lower = to_lower_copy(cgi_output.headers[i].first);
+            std::string key_lower = StringUtils::to_lower(cgi_output.headers[i].first);
             if (key_lower == "status" || key_lower == "content-length" || key_lower == "connection") {
                 continue;
             }

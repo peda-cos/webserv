@@ -30,7 +30,6 @@ class CgiHandler {
         CgiParsedOutput build_error_output(int status_code, const std::string& error_msg) const;
         CgiParsedOutput parse_cgi_output(const std::string& raw_output, CgiResult::Status execution_status) const;
         int validate_request(const HttpRequest& req, const ServerConfig& server_config, const LocationConfig& location_config) const;
-        bool is_method_allowed(const std::string& method, const LocationConfig& location_config) const;
 };
 
 #endif
