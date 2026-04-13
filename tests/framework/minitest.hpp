@@ -7,6 +7,12 @@
 #include <sstream>
 #include <cstdlib>
 
+// ANSI color codes
+#define COLOR_GREEN "\033[0;32m"
+#define COLOR_RED "\033[0;31m"
+#define COLOR_YELLOW "\033[0;33m"
+#define COLOR_RESET "\033[0m"
+
 namespace minitest {
 
 struct TestCase {
@@ -35,7 +41,6 @@ public:
         int failed = 0;
         for (size_t i = 0; i < _tests.size(); ++i) {
             _currentFailed = false;
-            std::cout << "[RUN   ] " << _tests[i].suite << "." << _tests[i].name << std::endl;
             try {
                 _tests[i].func();
             } catch (const AssertionFailure& e) {
@@ -49,18 +54,17 @@ public:
                 std::cout << "  Unknown exception caught" << std::endl;
             }
             if (_currentFailed) {
-                std::cout << "[FAILED] " << _tests[i].suite << "." << _tests[i].name << std::endl;
+                std::cout << COLOR_RED "✗ " COLOR_RESET 
+                          << _tests[i].suite << "." << _tests[i].name << std::endl;
                 ++failed;
             } else {
-                std::cout << "[  OK  ] " << _tests[i].suite << "." << _tests[i].name << std::endl;
+                std::cout << COLOR_GREEN "✓ " COLOR_RESET 
+                          << _tests[i].suite << "." << _tests[i].name << std::endl;
                 ++passed;
             }
         }
-        std::cout << std::endl;
-        std::cout << "========================================" << std::endl;
-        std::cout << " " << passed << " passed, " << failed << " failed, "
+        std::cout << passed << " passed, " << failed << " failed, "
                   << (passed + failed) << " total" << std::endl;
-        std::cout << "========================================" << std::endl;
         return (failed > 0) ? 1 : 0;
     }
 

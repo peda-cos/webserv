@@ -31,6 +31,17 @@ static void fill_addr(struct sockaddr_in& addr, const std::string& host, const s
 }
 
 /**
+ * Helper: Define timeout padrão para sockets (5 segundos)
+ */
+static void set_socket_timeout(int fd, int timeout_sec = 5) {
+    struct timeval tv;
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof tv);
+}
+
+/**
  * TEST: Live Server Smoke Test
  * Envia uma requisição real para o servidor que você subiu no terminal principal.
  */
@@ -113,6 +124,7 @@ TEST(Connection, BufferOverflowResilience) {
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return;
+    set_socket_timeout(fd);
 
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
@@ -144,6 +156,7 @@ TEST(Connection, ConcurrentStateIndependence) {
 
     for (int i = 0; i < CLIENTS; ++i) {
         fds[i] = socket(AF_INET, SOCK_STREAM, 0);
+        set_socket_timeout(fds[i]);
         connect(fds[i], (struct sockaddr*)&addr, sizeof(addr));
     }
 
@@ -187,6 +200,7 @@ TEST(Connection, AbruptDisconnect) {
  */
 TEST(Connection, NonBlockingTest) {
     int slow_fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(slow_fd);
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
     
@@ -194,6 +208,7 @@ TEST(Connection, NonBlockingTest) {
     send(slow_fd, "GET / HTTP/1.1", 14, 0); 
     
     int fast_fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fast_fd);
     connect(fast_fd, (struct sockaddr*)&addr, sizeof(addr));
     send(fast_fd, "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n", 35, 0);
     
@@ -215,6 +230,7 @@ TEST(Connection, FdLeakSanity) {
 
     for (int i = 0; i < 50; ++i) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
+        set_socket_timeout(fd);
         if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
             send(fd, "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n", 54, 0);
             char buf[128];
@@ -232,6 +248,7 @@ TEST(Connection, MultiPortListening) {
     std::string ports[] = {TEST_PORT, TEST_PORT_ALT};
     for (int i = 0; i < 2; ++i) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
+        set_socket_timeout(fd);
         struct sockaddr_in addr;
         fill_addr(addr, TEST_HOST, ports[i]);
 
@@ -255,6 +272,7 @@ TEST(Connection, MultiPortListening) {
  */
 TEST(Protocol, MethodNotAllowedResilience) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fd);
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
     connect(fd, (struct sockaddr*)&addr, sizeof(addr));
@@ -278,6 +296,7 @@ TEST(Protocol, MethodNotAllowedResilience) {
  */
 TEST(Protocol, KeepAliveSupport) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fd);
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
     connect(fd, (struct sockaddr*)&addr, sizeof(addr));
@@ -326,6 +345,7 @@ TEST(Protocol, MalformedRequestReturns400) {
  */
 TEST(Protocol, KeepAliveSequentialRequestsReparsed) {
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	set_socket_timeout(fd, 3);
 	struct sockaddr_in addr;
 	fill_addr(addr, TEST_HOST, TEST_PORT);
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
@@ -358,6 +378,7 @@ TEST(Protocol, KeepAliveSequentialRequestsReparsed) {
  */
 TEST(Protocol, PipelinedRequestsOnSingleSocket) {
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	set_socket_timeout(fd, 3);
 	struct sockaddr_in addr;
 	fill_addr(addr, TEST_HOST, TEST_PORT);
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
@@ -395,6 +416,7 @@ TEST(Protocol, PipelinedRequestsOnSingleSocket) {
  */
 TEST(Protocol, CgiNonBlocking) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fd, 3);
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
     connect(fd, (struct sockaddr*)&addr, sizeof(addr));
@@ -405,6 +427,7 @@ TEST(Protocol, CgiNonBlocking) {
 
     // Enquanto o CGI roda "em background", tentamos outro request rápido
     int fd2 = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fd2);
     connect(fd2, (struct sockaddr*)&addr, sizeof(addr));
     send(fd2, "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n", 35, 0);
 
@@ -425,6 +448,7 @@ TEST(Protocol, CgiNonBlocking) {
  */
 TEST(Protocol, InactivityTimeout) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fd, 10);
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
     connect(fd, (struct sockaddr*)&addr, sizeof(addr));
@@ -455,6 +479,7 @@ TEST(Protocol, InactivityTimeout) {
  */
 TEST(Connection, ReadBufferLimitEnforcement) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    set_socket_timeout(fd, 3);
     struct sockaddr_in addr;
     fill_addr(addr, TEST_HOST, TEST_PORT);
     connect(fd, (struct sockaddr*)&addr, sizeof(addr));
