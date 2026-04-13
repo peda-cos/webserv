@@ -35,8 +35,6 @@ int main(int argc, char* argv[]) {
 
         Server server(config);
         server.run();
-
-        testCGIExecutor();
     } catch(const std::exception& e) {
         Logger::error(e.what());
         return 1;

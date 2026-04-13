@@ -20,11 +20,9 @@ SERVER_SRCS = srcs/server/Server.cpp
 
 HTTP_SRCS = srcs/http/HttpRequest.cpp srcs/http/HttpResponse.cpp srcs/http/HttpRequestParser.cpp srcs/http/ChunkedDecoder.cpp
 
-CGI_SRCS = srcs/cgi/CgiExecutor.cpp srcs/cgi/CgiEnvBuilder.cpp srcs/cgi/CgiPipeManager.cpp
+CGI_SRCS = srcs/cgi/CgiExecutor.cpp srcs/cgi/CgiEnvBuilder.cpp srcs/cgi/CgiPipeManager.cpp srcs/cgi/CgiHandler.cpp
 
-EXAMPLES = srcs/examples.cpp # TODO: Remover na entrega final, apenas para testar funcionalidades
-
-SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS) $(HTTP_SRCS) $(CGI_SRCS) $(EXAMPLES) $(SERVER_SRCS)
+SRCS = srcs/main.cpp $(LEXER_SRCS) $(PARSER_SRCS) $(UTILS_SRCS) $(HTTP_SRCS) $(CGI_SRCS) $(SERVER_SRCS)
 
 OBJS = $(SRCS:srcs/%.cpp=objs/%.o)
 DEPS = $(OBJS:.o=.d)

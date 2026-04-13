@@ -59,8 +59,19 @@ const App = {
         { id: 10, name: '🐸 HEAD Request (no body)', method: 'HEAD', path: '/health-check.html', expectStatus: 200, validate: { noBody: true, hasHeader: 'content-type' }, status: 'pending' },
         
         // --- CGI EXECUTION (Must have real output) ---
-        { id: 11, name: '⚙️ CGI GET Execute', method: 'GET', path: '/cgi-bin/', expectStatus: 200, validate: { hasBody: true, contentType: ['text/html', 'text/plain'], notEmpty: true }, status: 'pending' },
-        { id: 12, name: '⚙️ CGI POST Form Data', method: 'POST', path: '/cgi-bin/form.cgi', expectStatus: 200, body: 'name=webserv&value=test', contentType: 'application/x-www-form-urlencoded', validate: { hasBody: true, notEmpty: true, containsHtml: true }, status: 'pending' },
+        { id: 11, name: '⚙️ CGI GET Execute Script', method: 'GET', path: '/cgi/script.py', expectStatus: 200, validate: { hasBody: true, contentType: 'text/html', notEmpty: true, contains: ['CGI Environment', 'REQUEST_METHOD: GET'] }, status: 'pending' },
+        { id: 12, name: '⚙️ CGI PATH_INFO + Query', method: 'GET', path: '/cgi/script.py/extra/path?x=1', expectStatus: 200, validate: { hasBody: true, contentType: 'text/html', contains: ['SCRIPT_NAME: /cgi/script.py', 'PATH_INFO: /extra/path', 'QUERY_STRING: x=1'] }, status: 'pending' },
+        { id: 22, name: '⚙️ CGI QUERY_STRING Only', method: 'GET', path: '/cgi/script.py?name=webserv&suite=cgi', expectStatus: 200, validate: { hasBody: true, contentType: 'text/html', contains: ['PATH_INFO: <br>', 'QUERY_STRING: name=webserv&suite=cgi'] }, status: 'pending' },
+        { id: 23, name: '⚙️ CGI POST Form Data', method: 'POST', path: '/cgi/script.py', expectStatus: 200, body: 'name=webserv&value=test', contentType: 'application/x-www-form-urlencoded', validate: { hasBody: true, notEmpty: true, contains: ['REQUEST_METHOD: POST', 'POST body: name=webserv&value=test'] }, status: 'pending' },
+        { id: 24, name: '⚙️ CGI HEAD (No Body)', method: 'HEAD', path: '/cgi/script.py', expectStatus: 200, validate: { noBody: true, hasHeader: 'content-type' }, status: 'pending' },
+        { id: 25, name: '⚙️ CGI DELETE Execute', method: 'DELETE', path: '/cgi/script.py', expectStatus: 200, validate: { hasBody: true, contentType: 'text/html', contains: 'REQUEST_METHOD: DELETE' }, status: 'pending' },
+        { id: 26, name: '⚙️ CGI Script Missing (404)', method: 'GET', path: '/cgi/not-found.py', expectStatus: 404, validate: { hasBody: true, notEmpty: true, contains: 'Not Found' }, status: 'pending' },
+        { id: 27, name: '⚙️ CGI Directory Request (200 Empty)', method: 'GET', path: '/cgi/', expectStatus: 200, validate: { noBody: true, contentType: 'application/octet-stream' }, status: 'pending' },
+        { id: 28, name: '⚙️ CGI Timeout (504)', method: 'GET', path: '/cgi/timeout.py', expectStatus: 504, validate: { hasBody: true, notEmpty: true, contains: 'CGI execution timed out' }, status: 'pending' },
+        { id: 29, name: '⚙️ CGI Script Failure (500)', method: 'GET', path: '/cgi/fail.py', expectStatus: 500, validate: { hasBody: true, notEmpty: true, contains: ['CGI script exited with code'] }, status: 'pending' },
+        { id: 30, name: '⭐ BONUS CGI PHP Without Handler', method: 'GET', path: '/cgi/script.php', expectStatus: 404, validate: { hasBody: true, notEmpty: true, contains: '404' }, status: 'pending' },
+        { id: 31, name: '⭐ BONUS CGI Perl Execute', method: 'GET', path: '/cgi/script.pl', expectStatus: 200, validate: { hasBody: true, contentType: 'text/html', notEmpty: true, contains: ['Perl CGI Environment', 'REQUEST_METHOD: GET'] }, status: 'pending' },
+        { id: 32, name: '⭐ BONUS CGI Unknown Extension', method: 'GET', path: '/cgi/script.rb', expectStatus: 404, validate: { hasBody: true, notEmpty: true, contains: '404' }, status: 'pending' },
         
         // --- EDGE CASES & LIMITS ---
         { id: 13, name: '⚠️ Large Body >5MB (413)', method: 'POST', path: '/upload', expectStatus: 413, body: 'X'.repeat(5500000), contentType: 'text/plain', validate: { containsHtml: true }, status: 'pending' },
@@ -80,6 +91,18 @@ const App = {
         { id: 21, name: '↪️ Redirect (301/302)', method: 'GET', path: '/redirect', expectStatus: [301, 302], validate: { hasHeader: 'location' }, status: 'pending' }
     ],
 
+    Utils: {
+        BODY_METHODS: ['POST', 'PUT', 'PATCH', 'DELETE'],
+
+        supportsRequestBody(method) {
+            return this.BODY_METHODS.includes(method);
+        },
+
+        hasRequestBody(method, body) {
+            return body !== null && body !== undefined && this.supportsRequestBody(method);
+        }
+    },
+
     Executor: {
         async send(method, path, headers = {}, body = null) {
             const url = App.Config.baseUrl() + path;
@@ -94,7 +117,7 @@ const App = {
                 mode: 'cors' 
             };
 
-            if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
+            if (App.Utils.hasRequestBody(method, body)) {
                 fetchOptions.body = body;
             }
 
@@ -135,7 +158,7 @@ const App = {
                     rawRequest += `${k}: ${v}\n`;
                 }
                 rawRequest += `\n`;
-                if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
+                if (App.Utils.hasRequestBody(method, body)) {
                     rawRequest += body;
                 }
 
@@ -553,13 +576,17 @@ window.Interface = {
         document.getElementById('req-method').addEventListener('change', (e) => {
             const m = e.target.value;
             const tabBody = document.getElementById('tab-body');
-            if (['POST', 'PUT', 'PATCH'].includes(m)) {
-                tabBody.style.display = 'block';
+            const bodyContent = document.getElementById('content-body');
+
+            if (App.Utils.supportsRequestBody(m)) {
+                if (tabBody) tabBody.style.display = 'block';
+                if (bodyContent) bodyContent.style.display = 'block';
             } else {
-                if(tabBody.classList.contains('active')) {
+                if (tabBody && tabBody.classList.contains('active')) {
                     this.switchTab('headers');
                 }
-                tabBody.style.display = 'none';
+                if (tabBody) tabBody.style.display = 'none';
+                if (bodyContent) bodyContent.style.display = 'none';
             }
         });
         
@@ -568,14 +595,11 @@ window.Interface = {
     },
 
     switchTab(tabName) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        
+
         if (tabName === 'headers') {
-            document.querySelector('.tab[onclick*="headers"]').classList.add('active');
             document.getElementById('content-headers').classList.add('active');
         } else {
-            document.getElementById('tab-body').classList.add('active');
             document.getElementById('content-body').classList.add('active');
         }
     },
@@ -604,7 +628,7 @@ window.Interface = {
         });
 
         let body = null;
-        if (['POST', 'PUT', 'PATCH'].includes(method)) {
+        if (App.Utils.supportsRequestBody(method)) {
             body = document.getElementById('req-body').value;
             const type = document.querySelector('input[name="bodyType"]:checked').value;
             if(type === 'json' && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
@@ -677,7 +701,7 @@ window.Interface = {
             list.appendChild(row);
         }
 
-        if (sc.body) {
+        if (sc.body !== undefined) {
             document.getElementById('req-body').value = sc.body;
             let btype = 'plain';
             if(sc.contentType === 'application/json') btype = 'json';
