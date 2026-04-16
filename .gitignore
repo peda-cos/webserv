@@ -1,3 +1,10 @@
 /tmp
 /objs
 webserv
+
+# local/editor artifacts
+.vscode/
+tests/integration/__pycache__/
+
+# Tests
+tests/unit/test_*

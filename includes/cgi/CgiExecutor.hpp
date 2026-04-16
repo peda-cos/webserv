@@ -10,7 +10,7 @@ class CgiExecutor {
     private:
         pid_t pid;
     public:
-        CgiResult execute(const HttpRequest& request, LocationConfig& location_config);
+        CgiResult execute(const HttpRequest& request, const LocationConfig& location_config) const;
 };
 
 #endif

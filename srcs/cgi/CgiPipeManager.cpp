@@ -1,5 +1,6 @@
 #include <CgiPipeManager.hpp>
 #include <CgiException.hpp>
+#include <Logger.hpp>
 
 #include <unistd.h>
 #include <sys/select.h>
@@ -61,16 +62,17 @@ int CgiPipeManager::handle_timeout() const
 
 std::string CgiPipeManager::read_from_child(pid_t pid) const
 {
-    std::string result = "";
+    std::string result;
     char buffer[1024];
     while (true) {
-
         int timeout_result = handle_timeout();
         if (timeout_result == 0) {
+            Logger::warn("CGI pipe read timed out");
             kill(pid, SIGKILL);
             waitpid(pid, NULL, 0);
             throw CgiException("CGI script execution timed out");
         } else if (timeout_result == -1) {
+            Logger::error("select() failed while reading CGI output");
             throw CgiException("select() error in timeout handling");
         }
         ssize_t bytesRead = read(stdout_pipe[0], buffer, sizeof(buffer) - 1);

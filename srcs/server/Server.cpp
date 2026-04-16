@@ -1,6 +1,8 @@
 #include <Server.hpp>
 #include <Logger.hpp>
 #include <HttpRequest.hpp>
+#include <HttpResponse.hpp>
+#include <StringUtils.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -19,6 +21,14 @@
 #define READ_BUFFER_SIZE        4096
 #define MAX_HEADER_BUFFER_SIZE  READ_BUFFER_SIZE
 #define CONNECTION_TIMEOUT_SEC  5
+
+namespace {
+    static void append_cors_headers(HttpResponse& response) {
+        response.addHeader("Access-Control-Allow-Origin", "*");
+        response.addHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, HEAD, PUT, OPTIONS");
+        response.addHeader("Access-Control-Allow-Headers", "*");
+    }
+}
 
 
 Server::Server(const Config& config) : _config(config) {
@@ -135,7 +145,7 @@ void Server::run() {
         int ready = poll(&_poll_fds[0], _poll_fds.size(), CONNECTION_TIMEOUT_SEC * 1000);
 
         if (ready < 0) {
-            Logger::error("poll() failed — stopping server");
+            Logger::error("poll failed — stopping server");
             break;
         }
 
@@ -330,10 +340,7 @@ bool Server::_queue_parsed_request_response(int fd) {
 
     std::map<std::string, std::string>::const_iterator connectionIt = req.headers.find("connection");
     if (connectionIt != req.headers.end()) {
-        std::string value = connectionIt->second;
-        for (std::size_t i = 0; i < value.length(); ++i) {
-            value[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(value[i])));
-        }
+        std::string value = StringUtils::to_lower(connectionIt->second);
         if (value.find("close") != std::string::npos) {
             shouldClose = true;
         } else if (req.httpVersion == "1.0" && value.find("keep-alive") != std::string::npos) {
@@ -344,12 +351,41 @@ bool Server::_queue_parsed_request_response(int fd) {
     conn.keep_alive = !shouldClose;
     conn.read_buffer = remainder;
 
+    CgiHandler cgi_handler;
+    const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
     if (req.errorCode != 0) {
         conn.keep_alive = false;
         conn.write_buffer = _build_error_response(req.errorCode, true);
-    } else {
-        const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
-        conn.write_buffer = _serve_static_with_cors(req, conn_header);
+    } else if (cgi_handler.is_cgi_request(req, *conn.server_config)) {
+        CgiParsedOutput cgi_output = cgi_handler.handle_request(req, *conn.server_config);
+        std::vector< std::pair<std::string, std::string> > response_headers;
+
+        bool has_content_type = false;
+        for (size_t i = 0; i < cgi_output.headers.size(); ++i) {
+            std::string key_lower = StringUtils::to_lower(cgi_output.headers[i].first);
+            if (key_lower == "status" || key_lower == "content-length" || key_lower == "connection") {
+                continue;
+            }
+            if (key_lower == "content-type") {
+                has_content_type = true;
+            }
+            response_headers.push_back(cgi_output.headers[i]);
+        }
+
+        if (!has_content_type && cgi_output.status_code != 204) {
+            response_headers.push_back(std::make_pair("Content-Type", "text/html"));
+        }
+
+        conn.write_buffer = _build_http_response(
+            cgi_output.status_code,
+            cgi_output.body,
+            response_headers,
+            conn_header,
+            true
+        );
+    }
+    else {
+        conn.write_buffer = _serve_static_response(req, conn_header);
     }
 
     conn.parser.reset();
@@ -362,66 +398,65 @@ bool Server::_queue_parsed_request_response(int fd) {
     return true;
 }
 
-std::string Server::_serve_static_with_cors(const HttpRequest& req, const std::string& conn_header) const {
-    std::ostringstream response;
-    std::string cors_headers = "Access-Control-Allow-Origin: *\r\n"
-                               "Access-Control-Allow-Methods: GET, POST, DELETE, HEAD, PUT, OPTIONS\r\n"
-                               "Access-Control-Allow-Headers: *\r\n";
-                               
+std::string Server::_serve_static_response(const HttpRequest& req, const std::string& conn_header) const {
     if (req.method == "OPTIONS") {
-        response << "HTTP/1.1 204 No Content\r\n"
-                 << cors_headers
-                 << "Connection: " << conn_header << "\r\n\r\n";
-    } else {
-        std::string reqPath = req.uri == "/" ? "/index.html" : req.uri;
-        std::string filepath = "www" + reqPath;
-        std::ifstream file(filepath.c_str(), std::ios::binary);
-
-        if (file.is_open()) {
-            std::ostringstream ss;
-            ss << file.rdbuf();
-            std::string content = ss.str();
-            
-            std::string content_type = "application/octet-stream";
-            if (filepath.find(".html") != std::string::npos) content_type = "text/html";
-            else if (filepath.find(".css") != std::string::npos) content_type = "text/css";
-            else if (filepath.find(".js") != std::string::npos) content_type = "application/javascript";
-            else if (filepath.find(".txt") != std::string::npos) content_type = "text/plain";
-            
-            response << "HTTP/1.1 200 OK\r\n"
-                     << cors_headers
-                     << "Content-Type: " << content_type << "\r\n"
-                     << "Content-Length: " << content.length() << "\r\n"
-                     << "Connection: " << conn_header << "\r\n"
-                     << "\r\n"
-                     << content;
-        } else {
-            std::string not_found = "<h1>404 Not Found</h1>";
-            response << "HTTP/1.1 404 Not Found\r\n"
-                     << cors_headers
-                     << "Content-Type: text/html\r\n"
-                     << "Content-Length: " << not_found.length() << "\r\n"
-                     << "Connection: " << conn_header << "\r\n"
-                     << "\r\n"
-                     << not_found;
-        }
+        std::vector< std::pair<std::string, std::string> > headers;
+        return _build_http_response(204, "", headers, conn_header, true);
     }
-    return response.str();
+
+    std::string reqPath = req.uri == "/" ? "/index.html" : req.uri;
+    std::string filepath = "www" + reqPath;
+    std::ifstream file(filepath.c_str(), std::ios::binary);
+
+    if (file.is_open()) {
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        std::string content = ss.str();
+
+        std::string content_type = "application/octet-stream";
+        if (filepath.find(".html") != std::string::npos) content_type = "text/html";
+        else if (filepath.find(".css") != std::string::npos) content_type = "text/css";
+        else if (filepath.find(".js") != std::string::npos) content_type = "application/javascript";
+        else if (filepath.find(".txt") != std::string::npos) content_type = "text/plain";
+
+        std::vector< std::pair<std::string, std::string> > headers;
+        headers.push_back(std::make_pair("Content-Type", content_type));
+        return _build_http_response(200, content, headers, conn_header, true);
+    }
+
+    std::string not_found = "<h1>404 Not Found</h1>";
+    std::vector< std::pair<std::string, std::string> > headers;
+    headers.push_back(std::make_pair("Content-Type", "text/html"));
+    return _build_http_response(404, not_found, headers, conn_header, true);
+}
+
+std::string Server::_build_http_response(int statusCode,
+    const std::string& body,
+    const std::vector< std::pair<std::string, std::string> >& headers,
+    const std::string& conn_header,
+    bool includeCors) const {
+    HttpResponse response;
+    response.setStatusCode(statusCode).setBody(body);
+
+    for (size_t i = 0; i < headers.size(); ++i) {
+        response.addHeader(headers[i].first, headers[i].second);
+    }
+
+    if (includeCors) {
+        append_cors_headers(response);
+    }
+
+    response.addHeader("Connection", conn_header);
+    return response.toString();
 }
 
 std::string Server::_build_error_response(int statusCode, bool closeConnection) const {
     std::string reason = _reason_phrase(statusCode);
     std::string body = reason;
     std::string connection = closeConnection ? "close" : "keep-alive";
-    std::ostringstream oss;
-
-    oss << "HTTP/1.1 " << statusCode << " " << reason << "\r\n"
-        << "Content-Type: text/plain\r\n"
-        << "Content-Length: " << body.size() << "\r\n"
-        << "Connection: " << connection << "\r\n"
-        << "\r\n"
-        << body;
-    return oss.str();
+    std::vector< std::pair<std::string, std::string> > headers;
+    headers.push_back(std::make_pair("Content-Type", "text/plain"));
+    return _build_http_response(statusCode, body, headers, connection, true);
 }
 
 std::string Server::_reason_phrase(int statusCode) const {

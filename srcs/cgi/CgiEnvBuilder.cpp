@@ -41,7 +41,8 @@ void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const Loc
 
     env_map["REQUEST_METHOD"] = request.method;
     env_map["REQUEST_URI"] = request.uri;
-    env_map["REMOTE_ADDR"] = request.client_ip;
+    env_map["CONTENT_LENGTH"] = "0";
+    env_map["CONTENT_TYPE"] = "";
 
     UriPathParts path_parts = extract_path_parts(request, location);
     env_map["SCRIPT_NAME"] = path_parts.script_name;
@@ -107,6 +108,5 @@ CgiEnvBuilder::~CgiEnvBuilder() {
 }
 
 char** CgiEnvBuilder::getEnvp() const {
-    if (envp) return envp;
-    return NULL;
+    return envp;
 }
