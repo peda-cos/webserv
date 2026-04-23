@@ -24,11 +24,11 @@ PURE_UNIT_TESTS = \
 	$(UNIT_DIR)/test_cgi_parser_contract \
 	$(UNIT_DIR)/test_cgi_executor \
 	$(UNIT_DIR)/test_chunked_decoder \
+	$(UNIT_DIR)/test_http_response_builder
 	$(UNIT_DIR)/test_session_persistence
 
 # TDD stub tests (expected to fail - informational only)
 STUB_TESTS = \
-	$(UNIT_DIR)/test_http_response_builder \
 	$(UNIT_DIR)/test_method_handlers
 
 # Integration tests (require ./webserv running - informational only)
@@ -150,7 +150,11 @@ $(UNIT_DIR)/test_http_request_parser: $(UNIT_DIR)/test_http_request_parser.cpp $
 		../srcs/http/ChunkedDecoder.cpp
 
 $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
+	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -I../includes/http -I../includes/utils -I../includes/config -o $@ $< \
+		../srcs/http/HttpResponseBuilder.cpp \
+		../srcs/http/HttpResponse.cpp \
+		../srcs/http/MimeTypes.cpp \
+		../srcs/utils/StringUtils.cpp
 
 $(UNIT_DIR)/test_method_handlers: $(UNIT_DIR)/test_method_handlers.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
@@ -230,6 +234,8 @@ $(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWO
 		../srcs/http/HttpRequest.cpp \
 		../srcs/http/HttpRequestParser.cpp \
 		../srcs/http/HttpResponse.cpp \
+		../srcs/http/HttpResponseBuilder.cpp \
+		../srcs/http/MimeTypes.cpp \
 		../srcs/http/ChunkedDecoder.cpp \
 		../srcs/utils/ParserDirectiveUtils.cpp \
 		../srcs/cgi/CgiHandler.cpp \

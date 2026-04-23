@@ -1,72 +1,11 @@
 /* ************************************************************************** */
 /*  test_http_response_builder.cpp – unit tests for HttpResponseBuilder      */
-/*  All stubs return empty/default values so every test fails deterministically */
 /* ************************************************************************** */
 
 #include "minitest.hpp"
+#include <HttpResponseBuilder.hpp>
 
 #include <string>
-#include <map>
-#include <sstream>
-
-/* ======================================================================== */
-/*  Stub: HttpResponse                                                      */
-/* ======================================================================== */
-
-struct HttpResponse {
-    int                                 statusCode;
-    std::string                         reasonPhrase;
-    std::map<std::string, std::string>  headers;
-    std::string                         body;
-
-    HttpResponse() : statusCode(0) {}
-};
-
-/* ======================================================================== */
-/*  Stub: HttpResponseBuilder                                               */
-/* ======================================================================== */
-
-class HttpResponseBuilder {
-public:
-    HttpResponseBuilder& setStatus(int code, const std::string& reason)
-    {
-        (void)code;
-        (void)reason;
-        return *this;
-    }
-
-    HttpResponseBuilder& setHeader(const std::string& key, const std::string& value)
-    {
-        (void)key;
-        (void)value;
-        return *this;
-    }
-
-    HttpResponseBuilder& setBody(const std::string& body)
-    {
-        (void)body;
-        return *this;
-    }
-
-    std::string build() const
-    {
-        return "";
-    }
-
-    static std::string buildErrorPage(int code, const std::string& customPath)
-    {
-        (void)code;
-        (void)customPath;
-        return "";
-    }
-
-    static std::string buildRedirect(int code, const std::string& location)
-    {
-        (void)code;
-        (void)location;
-        return "";
-    }
-};
 
 /* ======================================================================== */
 /*  Tests                                                                   */
@@ -112,7 +51,7 @@ TEST(HttpResponseBuilder, ContentLengthMatchesBody)
     ASSERT_STR_CONTAINS(response, "Content-Length: 5");
 }
 
-/* 4. buildErrorPage with no custom path returns default HTML containing the
+/* 4. buildErrorPage with no custom body returns default HTML containing the
  *    status code. */
 TEST(HttpResponseBuilder, DefaultErrorPage)
 {
@@ -121,10 +60,11 @@ TEST(HttpResponseBuilder, DefaultErrorPage)
     ASSERT_STR_CONTAINS(page, "404");
 }
 
-/* 5. buildErrorPage with a custom path references that path in the output. */
+/* 5. buildErrorPage with a custom body uses that body. */
 TEST(HttpResponseBuilder, CustomErrorPage)
 {
-    std::string page = HttpResponseBuilder::buildErrorPage(404, "/errors/404.html");
+    std::string customBody = "<html><body>Custom 404 from /errors/404.html</body></html>";
+    std::string page = HttpResponseBuilder::buildErrorPage(404, customBody);
 
     ASSERT_STR_CONTAINS(page, "/errors/404.html");
 }
