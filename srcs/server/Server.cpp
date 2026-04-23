@@ -5,6 +5,8 @@
 #include <StringUtils.hpp>
 #include <HttpResponseBuilder.hpp>
 #include <MimeTypes.hpp>
+#include <RequestRouter.hpp>
+#include <CgiUtils.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,9 +15,12 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #include <cstring>
 #include <cctype>
+#include <cstdio>
 #include <sstream>
 #include <fstream>
 #include <iostream>
@@ -353,49 +358,66 @@ bool Server::_queue_parsed_request_response(int fd) {
     conn.keep_alive = !shouldClose;
     conn.read_buffer = remainder;
 
-    CgiHandler cgi_handler;
     const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
     if (req.errorCode != 0) {
         conn.keep_alive = false;
         conn.write_buffer = HttpResponseBuilder::buildErrorPage(req.errorCode, "");
-    } else if (cgi_handler.is_cgi_request(req, *conn.server_config)) {
-        CgiParsedOutput cgi_output = cgi_handler.handle_request(req, *conn.server_config);
-        std::vector< std::pair<std::string, std::string> > response_headers;
+    } else if (!conn.server_config) {
+        Logger::error("No server config for connection");
+        conn.write_buffer = HttpResponseBuilder::buildErrorPage(500, "");
+    } else {
+        const LocationConfig* loc = RequestRouter::matchLocation(*conn.server_config, req.path);
+        if (!loc) {
+            conn.write_buffer = HttpResponseBuilder::buildErrorPage(404, "");
+        } else if (!RequestRouter::isMethodAllowed(req.method, *loc)) {
+            conn.write_buffer = HttpResponseBuilder::buildErrorPage(405, "");
+        } else {
+            std::string physicalPath = RequestRouter::resolvePhysicalPath(*loc, req.path, *conn.server_config);
+            if (RequestRouter::isPathTraversal(physicalPath)) {
+                conn.write_buffer = HttpResponseBuilder::buildErrorPage(403, "");
+            } else {
+                RequestRouter::TargetType target = RequestRouter::classifyRequest(physicalPath, *loc);
+                if (target == RequestRouter::TARGET_CGI) {
+                    CgiHandler cgi_handler;
+                    CgiParsedOutput cgi_output = cgi_handler.handle_request(req, *conn.server_config);
+                    std::vector< std::pair<std::string, std::string> > response_headers;
 
-        bool has_content_type = false;
-        for (size_t i = 0; i < cgi_output.headers.size(); ++i) {
-            std::string key_lower = StringUtils::to_lower(cgi_output.headers[i].first);
-            if (key_lower == "status" || key_lower == "content-length" || key_lower == "connection") {
-                continue;
+                    bool has_content_type = false;
+                    for (size_t i = 0; i < cgi_output.headers.size(); ++i) {
+                        std::string key_lower = StringUtils::to_lower(cgi_output.headers[i].first);
+                        if (key_lower == "status" || key_lower == "content-length" || key_lower == "connection") {
+                            continue;
+                        }
+                        if (key_lower == "content-type") {
+                            has_content_type = true;
+                        }
+                        response_headers.push_back(cgi_output.headers[i]);
+                    }
+
+                    if (!has_content_type && cgi_output.status_code != 204) {
+                        response_headers.push_back(std::make_pair("Content-Type", "text/html"));
+                    }
+
+                    HttpResponseBuilder builder;
+                    builder.setStatus(cgi_output.status_code)
+                           .setBody(cgi_output.body)
+                           .setConnection(conn_header);
+
+                    for (size_t i = 0; i < response_headers.size(); ++i) {
+                        builder.setHeader(response_headers[i].first, response_headers[i].second);
+                    }
+
+                    if (!has_content_type && cgi_output.status_code != 204) {
+                        builder.setContentType("text/html");
+                    }
+
+                    append_cors_headers(builder);
+                    conn.write_buffer = builder.build();
+                } else {
+                    conn.write_buffer = _serve_static_response(req, physicalPath, *loc, conn_header);
+                }
             }
-            if (key_lower == "content-type") {
-                has_content_type = true;
-            }
-            response_headers.push_back(cgi_output.headers[i]);
         }
-
-        if (!has_content_type && cgi_output.status_code != 204) {
-            response_headers.push_back(std::make_pair("Content-Type", "text/html"));
-        }
-
-        HttpResponseBuilder builder;
-        builder.setStatus(cgi_output.status_code)
-               .setBody(cgi_output.body)
-               .setConnection(conn_header);
-        
-        for (size_t i = 0; i < response_headers.size(); ++i) {
-            builder.setHeader(response_headers[i].first, response_headers[i].second);
-        }
-        
-        if (!has_content_type && cgi_output.status_code != 204) {
-            builder.setContentType("text/html");
-        }
-
-        append_cors_headers(builder);
-        conn.write_buffer = builder.build();
-    }
-    else {
-        conn.write_buffer = _serve_static_response(req, conn_header);
     }
 
     conn.parser.reset();
@@ -408,7 +430,38 @@ bool Server::_queue_parsed_request_response(int fd) {
     return true;
 }
 
-std::string Server::_serve_static_response(const HttpRequest& req, const std::string& conn_header) const {
+std::string Server::_generate_directory_listing(const std::string& physicalPath) const {
+    DIR* dir = opendir(physicalPath.c_str());
+    if (!dir) {
+        return "";
+    }
+
+    std::ostringstream html;
+    html << "<html><head><title>Index of " << physicalPath << "</title></head><body>\n";
+    html << "<h1>Index of " << physicalPath << "</h1><hr><pre>\n";
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        std::string name = entry->d_name;
+        if (name == "." || name == "..") {
+            continue;
+        }
+
+        std::string full_path = physicalPath + "/" + name;
+        struct stat st;
+        if (stat(full_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+            name += "/";
+        }
+
+        html << "<a href=\"" << name << "\">" << name << "</a>\n";
+    }
+
+    closedir(dir);
+    html << "</pre><hr></body></html>";
+    return html.str();
+}
+
+std::string Server::_serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const std::string& conn_header) const {
     if (req.method == "OPTIONS") {
         HttpResponseBuilder builder;
         builder.setStatus(204).setConnection(conn_header);
@@ -416,26 +469,114 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
         return builder.build();
     }
 
-    std::string reqPath = req.uri == "/" ? "/index.html" : req.uri;
-    std::string filepath = "www" + reqPath;
-    std::ifstream file(filepath.c_str(), std::ios::binary);
+    if (req.method == "GET" || req.method == "HEAD") {
+        struct stat st;
+        if (stat(physicalPath.c_str(), &st) != 0) {
+            return HttpResponseBuilder::buildErrorPage(404, "");
+        }
 
-    if (file.is_open()) {
-        std::ostringstream ss;
-        ss << file.rdbuf();
-        std::string content = ss.str();
+        if (S_ISDIR(st.st_mode)) {
+            if (!loc.index.empty()) {
+                std::string indexPath = CgiUtils::join_paths(physicalPath, loc.index);
+                std::ifstream indexFile(indexPath.c_str(), std::ios::binary);
+                if (indexFile.is_open()) {
+                    std::ostringstream ss;
+                    ss << indexFile.rdbuf();
+                    std::string content = ss.str();
+                    HttpResponseBuilder builder;
+                    builder.setStatus(200)
+                           .setBody(content)
+                           .setContentType(MimeTypes::getType(indexPath))
+                           .setConnection(conn_header);
+                    append_cors_headers(builder);
+                    return builder.build();
+                }
+            }
 
-        std::string content_type = MimeTypes::getType(filepath);
+            if (loc.autoindex == ON) {
+                std::string listing = _generate_directory_listing(physicalPath);
+                if (!listing.empty()) {
+                    HttpResponseBuilder builder;
+                    builder.setStatus(200)
+                           .setBody(listing)
+                           .setContentType("text/html")
+                           .setConnection(conn_header);
+                    append_cors_headers(builder);
+                    return builder.build();
+                }
+            }
+
+            return HttpResponseBuilder::buildErrorPage(403, "");
+        }
+
+        if (S_ISREG(st.st_mode)) {
+            std::ifstream file(physicalPath.c_str(), std::ios::binary);
+            if (file.is_open()) {
+                std::ostringstream ss;
+                ss << file.rdbuf();
+                std::string content = ss.str();
+                HttpResponseBuilder builder;
+                builder.setStatus(200)
+                       .setBody(content)
+                       .setContentType(MimeTypes::getType(physicalPath))
+                       .setConnection(conn_header);
+                append_cors_headers(builder);
+                return builder.build();
+            }
+        }
+
+        return HttpResponseBuilder::buildErrorPage(404, "");
+    }
+
+    if (req.method == "POST") {
+        if (loc.upload_store.empty()) {
+            return HttpResponseBuilder::buildErrorPage(403, "");
+        }
+
+        struct stat st;
+        if (stat(loc.upload_store.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
+            return HttpResponseBuilder::buildErrorPage(500, "");
+        }
+
+        std::string filename = "upload_" + StringUtils::to_string(static_cast<int>(time(NULL))) + ".txt";
+        std::string uploadPath = CgiUtils::join_paths(loc.upload_store, filename);
+
+        std::ofstream out(uploadPath.c_str(), std::ios::binary);
+        if (!out.is_open()) {
+            return HttpResponseBuilder::buildErrorPage(500, "");
+        }
+        out.write(req.body.c_str(), static_cast<std::streamsize>(req.body.length()));
+        out.close();
 
         HttpResponseBuilder builder;
-        builder.setStatus(200)
-               .setBody(content)
-               .setContentType(content_type)
+        builder.setStatus(201)
+               .setBody("Created")
+               .setContentType("text/plain")
                .setConnection(conn_header);
         append_cors_headers(builder);
         return builder.build();
     }
 
-    return HttpResponseBuilder::buildErrorPage(404, "");
+    if (req.method == "DELETE") {
+        struct stat st;
+        if (stat(physicalPath.c_str(), &st) != 0) {
+            return HttpResponseBuilder::buildErrorPage(404, "");
+        }
+
+        if (!S_ISREG(st.st_mode)) {
+            return HttpResponseBuilder::buildErrorPage(404, "");
+        }
+
+        if (std::remove(physicalPath.c_str()) != 0) {
+            return HttpResponseBuilder::buildErrorPage(500, "");
+        }
+
+        HttpResponseBuilder builder;
+        builder.setStatus(204).setConnection(conn_header);
+        append_cors_headers(builder);
+        return builder.build();
+    }
+
+    return HttpResponseBuilder::buildErrorPage(405, "");
 }
 

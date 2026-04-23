@@ -16,7 +16,7 @@ UTILS_SRCS = srcs/utils/ConfigUtils.cpp srcs/utils/ParsingUtils.cpp \
 PARSER_SRCS = srcs/config/ConfigParser.cpp srcs/config/ParserSyntaxError.cpp \
 	srcs/config/ConfigParserServer.cpp srcs/config/ConfigParserLocation.cpp \
 
-SERVER_SRCS = srcs/server/Server.cpp	
+SERVER_SRCS = srcs/server/Server.cpp srcs/server/RequestRouter.cpp srcs/server/MethodHandler.cpp	
 
 HTTP_SRCS = srcs/http/HttpRequest.cpp srcs/http/HttpResponse.cpp srcs/http/HttpResponseBuilder.cpp srcs/http/HttpRequestParser.cpp srcs/http/ChunkedDecoder.cpp srcs/http/MimeTypes.cpp
 
