@@ -25,6 +25,7 @@ PURE_UNIT_TESTS = \
 	$(UNIT_DIR)/test_cgi_executor \
 	$(UNIT_DIR)/test_chunked_decoder \
 	$(UNIT_DIR)/test_http_response_builder
+	$(UNIT_DIR)/test_session_persistence
 
 # TDD stub tests (expected to fail - informational only)
 STUB_TESTS = \
@@ -175,6 +176,9 @@ $(UNIT_DIR)/test_cgi_executor: $(UNIT_DIR)/test_cgi_executor.cpp $(FRAMEWORK_DIR
 
 $(UNIT_DIR)/test_chunked_decoder: $(UNIT_DIR)/test_chunked_decoder.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -I../includes/http -o $@ $< ../srcs/http/ChunkedDecoder.cpp
+
+$(UNIT_DIR)/test_session_persistence: $(UNIT_DIR)/test_session_persistence.cpp $(FRAMEWORK_DIR)/minitest.hpp $(TEST_CGI_EXECUTOR_SRCS)
+	$(CXX) $(CXXFLAGS) -Iframework -I../includes -I../includes/cgi -I../includes/http -I../includes/config -I../includes/utils -o $@ $< $(TEST_CGI_EXECUTOR_SRCS)
 
 # --- Integration tests (requires ./webserv binary) ---
 integration:

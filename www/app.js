@@ -7,6 +7,15 @@ const App = {
         port: '8080',
         timeout: 5000,
         baseUrl: function() {
+            // Se o host/porta da config baterem com o atual, usamos caminho relativo
+            // Isso garante que o browser trate como same-origin e envie cookies naturalmente.
+            const currentHost = window.location.hostname;
+            const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+            
+            if ((this.host === currentHost || (this.host === '127.0.0.1' && currentHost === 'localhost')) && 
+                this.port === currentPort) {
+                return '';
+            }
             return `http://${this.host}:${this.port}`;
         }
     },
@@ -87,8 +96,9 @@ const App = {
         { id: 19, name: '📋 Host Header Required', method: 'GET', path: '/', headers: { 'Host': '127.0.0.1:8080' }, expectStatus: 200, validate: { hasBody: true, containsHtml: true, contentType: 'text/html' }, status: 'pending' },
         
         // --- BONUS & ADVANCED ---
-        { id: 20, name: '🍪 Cookies Support (Set-Cookie)', method: 'GET', path: '/', headers: { 'Cookie': 'session=abc123' }, expectStatus: 200, validate: { hasBody: true, hasHeader: 'set-cookie', contains: ['cookie'] }, status: 'pending' },
-        { id: 21, name: '↪️ Redirect (301/302)', method: 'GET', path: '/redirect', expectStatus: [301, 302], validate: { hasHeader: 'location' }, status: 'pending' }
+        { id: 20, name: '🍪 Cookies Support (Set-Cookie)', method: 'GET', path: '/cgi/session.py', expectStatus: 200, validate: { hasBody: true, contains: ['Session ID', 'Visit Count'] }, status: 'pending' },
+        { id: 21, name: '↪️ Redirect (301/302)', method: 'GET', path: '/redirect', expectStatus: [301, 302], validate: { hasHeader: 'location' }, status: 'pending' },
+        { id: 33, name: '⭐ BONUS Session Persistence (Multi-Step)', method: 'GET', path: '/cgi/session.py', expectStatus: 200, validate: { hasBody: true, contains: ['Session ID', 'Visit Count'] }, status: 'pending' }
     ],
 
     Utils: {
@@ -105,16 +115,27 @@ const App = {
 
     Executor: {
         async send(method, path, headers = {}, body = null) {
-            const url = App.Config.baseUrl() + path;
+            const baseUrl = App.Config.baseUrl();
+            const url = baseUrl + path;
+            
+            // Log para debug no console
+            console.log(`[WebServ] ${method} ${url || path}`);
+            
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), App.Config.timeout);
+            
+            // Verificação de segurança/navegador para o usuário
+            const FORBIDDEN_HEADERS = ['cookie', 'host', 'user-agent', 'referer', 'origin'];
+            for (const k of Object.keys(headers)) {
+                if (FORBIDDEN_HEADERS.includes(k.toLowerCase())) {
+                    console.warn(`[WebServ] O cabeçalho '${k}' é restrito pelo navegador e pode não ser enviado via fetch.`);
+                }
+            }
 
             let fetchOptions = {
                 method: method,
                 headers: headers,
-                signal: controller.signal,
-                // no-cors mode might hide status code (returns 0), we use default cors and rely on server or local bypass
-                mode: 'cors' 
+                signal: controller.signal
             };
 
             if (App.Utils.hasRequestBody(method, body)) {
@@ -657,6 +678,56 @@ window.Interface = {
         let headers = sc.headers ? { ...sc.headers } : {};
         if (sc.contentType) headers['Content-Type'] = sc.contentType;
 
+        // -- ESPECIAL: Teste de Sessão Multi-etapa (ID 33) --
+        if (sc.id === 33) {
+            console.log("[WebServ] Iniciando teste de fluxo de sessão isolado...");
+            
+            // Garantir isolamento limpando sessões anteriores
+            await App.Executor.send('GET', '/cgi/session.py?action=clear');
+
+            // Etapa 1: Primeira visita
+            const res1 = await App.Executor.send(sc.method, sc.path, headers, sc.body);
+            
+            // Extrair contador atual (ex: "Visit Count: 1")
+            const match1 = res1.body.match(/Visit Count: (\d+)/);
+            const count1 = match1 ? parseInt(match1[1]) : null;
+
+            if (count1 === null) {
+                sc.status = 'fail';
+                sc.validationReason = "Erro no Step 1: Contador não encontrado.";
+                App.UI.renderScenarios();
+                return;
+            }
+
+            await new Promise(r => setTimeout(r, 500));
+
+            // Etapa 2: Segunda visita
+            const res2 = await App.Executor.send(sc.method, sc.path, headers, sc.body);
+            const match2 = res2.body.match(/Visit Count: (\d+)/);
+            const count2 = match2 ? parseInt(match2[1]) : null;
+
+            if (count2 === (count1 + 1)) {
+                sc.status = 'pass';
+                sc.validationReason = `Sessão OK! Incrementou de ${count1} para ${count2}`;
+                sc.validationDetails = [
+                    { name: `Passo 1: Início (${count1})`, passed: true },
+                    { name: `Passo 2: Incremento (${count2})`, passed: true }
+                ];
+            } else {
+                sc.status = 'fail';
+                sc.validationReason = `Erro: Esperado ${count1 + 1}, mas obteve ${count2}`;
+            }
+            App.UI.renderScenarios();
+            App.UI.renderResponseViewer(res2);
+            return;
+        }
+
+        // -- ESPECIAL: Cookie Support (ID 20) - Garantir isolamento --
+        if (sc.id === 20) {
+            await App.Executor.send('GET', '/cgi/session.py?action=clear');
+        }
+
+        // -- Fluxo Normal para outros testes --
         const response = await App.Executor.send(sc.method, sc.path, headers, sc.body);
         
         sc.actualStatus = response.status;
@@ -670,15 +741,11 @@ window.Interface = {
             sc.validationReason = validation.reason;
         }
         
-        // Store validation details for display
         if (validation.details) {
             sc.validationDetails = validation.details;
         }
 
-        // Render specific scenario result
         App.UI.renderScenarios();
-        
-        // Show result in viewer
         App.UI.renderResponseViewer(response);
     },
 

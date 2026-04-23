@@ -202,4 +202,17 @@ TEST(CgiEnv, EssentialVarsPresent)
 	}
 }
 
+TEST(CgiEnv, CookieHeaderIsExported)
+{
+	HttpRequest req;
+	req.setMethod(GET)
+	   .setUriPath("/cgi-bin/test.py")
+	   .setVersion("HTTP/1.1")
+	   .addHeader("cookie", "session_id=123; user=jon");
+
+	CgiEnvBuilder builder(req, create_test_location());
+	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
+	ASSERT_EQ(std::string("session_id=123; user=jon"), env["HTTP_COOKIE"]);
+}
+
 MINITEST_MAIN()

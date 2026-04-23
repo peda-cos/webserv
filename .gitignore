@@ -8,3 +8,4 @@ tests/integration/__pycache__/
 
 # Tests
 tests/unit/test_*
+!tests/unit/test_*.cpp
