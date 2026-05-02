@@ -680,16 +680,13 @@ window.Interface = {
 
         // -- ESPECIAL: Teste de Sessão Multi-etapa (ID 33) --
         if (sc.id === 33) {
-            console.log("[WebServ] Iniciando teste de fluxo de sessão isolado...");
+            console.log("[WebServ] Iniciando teste de fluxo de sessão...");
             
-            // Garantir isolamento limpando sessões anteriores
-            await App.Executor.send('GET', '/cgi/session.py?action=clear');
-
             // Etapa 1: Primeira visita
             const res1 = await App.Executor.send(sc.method, sc.path, headers, sc.body);
             
-            // Extrair contador atual (ex: "Visit Count: 1")
-            const match1 = res1.body.match(/Visit Count: (\d+)/);
+            // Extrair contador atual
+            const match1 = res1.body.match(/<h2>Visit Count: (\d+)<\/h2>/);
             const count1 = match1 ? parseInt(match1[1]) : null;
 
             if (count1 === null) {
@@ -703,14 +700,14 @@ window.Interface = {
 
             // Etapa 2: Segunda visita
             const res2 = await App.Executor.send(sc.method, sc.path, headers, sc.body);
-            const match2 = res2.body.match(/Visit Count: (\d+)/);
+            const match2 = res2.body.match(/<h2>Visit Count: (\d+)<\/h2>/);
             const count2 = match2 ? parseInt(match2[1]) : null;
 
             if (count2 === (count1 + 1)) {
                 sc.status = 'pass';
                 sc.validationReason = `Sessão OK! Incrementou de ${count1} para ${count2}`;
                 sc.validationDetails = [
-                    { name: `Passo 1: Início (${count1})`, passed: true },
+                    { name: `Passo 1: Valor (${count1})`, passed: true },
                     { name: `Passo 2: Incremento (${count2})`, passed: true }
                 ];
             } else {
@@ -720,11 +717,6 @@ window.Interface = {
             App.UI.renderScenarios();
             App.UI.renderResponseViewer(res2);
             return;
-        }
-
-        // -- ESPECIAL: Cookie Support (ID 20) - Garantir isolamento --
-        if (sc.id === 20) {
-            await App.Executor.send('GET', '/cgi/session.py?action=clear');
         }
 
         // -- Fluxo Normal para outros testes --

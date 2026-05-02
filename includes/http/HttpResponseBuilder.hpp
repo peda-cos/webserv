@@ -18,6 +18,7 @@ class HttpResponseBuilder {
         std::string build() const;
 
         static std::string buildErrorPage(int code, const std::string& customBody);
+        static std::string buildErrorBody(int code, const std::string& message = "");
         static std::string buildRedirect(int code, const std::string& location);
         static std::string reasonPhraseFor(int code);
 
@@ -28,8 +29,6 @@ class HttpResponseBuilder {
         std::string _contentType;
         std::string _connection;
         std::vector< std::pair<std::string, std::string> > _headers;
-
-        static std::string _defaultErrorHtml(int code, const std::string& reason);
 };
 
 #endif

@@ -6,6 +6,7 @@
 #include <map>
 #include <HttpRequest.hpp>
 #include <CgiExecutor.hpp>
+#include <CgiResult.hpp>
 #include <ServerConfig.hpp>
 
 struct CgiParsedOutput {
@@ -20,15 +21,13 @@ class CgiHandler {
     public:
         CgiHandler();
         ~CgiHandler();
-        CgiParsedOutput handle_request(const HttpRequest& req,
-            const ServerConfig& server_config) const;
-        
+
         bool is_cgi_request(const HttpRequest& req, const ServerConfig& server_config) const;
+        int start_cgi(const HttpRequest& req, const ServerConfig& server_config, CgiProcessInfo& out_info) const;
+        CgiParsedOutput parse_cgi_output(const std::string& raw_output, CgiResult::Status execution_status) const;
 
     private:
         const CgiExecutor _executor;
-        CgiParsedOutput build_error_output(int status_code, const std::string& error_msg) const;
-        CgiParsedOutput parse_cgi_output(const std::string& raw_output, CgiResult::Status execution_status) const;
         int validate_request(const HttpRequest& req, const ServerConfig& server_config, const LocationConfig& location_config) const;
 };
 

@@ -3,7 +3,6 @@
 
 #include <string>
 #include <sys/types.h>
-#include <HttpRequest.hpp>
 
 class CgiPipeManager {
     private:
@@ -14,9 +13,9 @@ class CgiPipeManager {
         ~CgiPipeManager();
         void setup_child_process() const;
         void setup_parent_process() const;
-        void write_to_child(const std::string& data) const;
-        std::string read_from_child(pid_t pid) const;
-        int handle_timeout() const;
+        int* get_stdin_pipe() { return stdin_pipe; }
+        int* get_stdout_pipe() { return stdout_pipe; }
+        void close_all();
 };
 
 #endif
