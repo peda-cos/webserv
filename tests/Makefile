@@ -24,12 +24,12 @@ PURE_UNIT_TESTS = \
 	$(UNIT_DIR)/test_cgi_parser_contract \
 	$(UNIT_DIR)/test_cgi_executor \
 	$(UNIT_DIR)/test_chunked_decoder \
-	$(UNIT_DIR)/test_http_response_builder
-	$(UNIT_DIR)/test_session_persistence
+	$(UNIT_DIR)/test_http_response_builder \
+	$(UNIT_DIR)/test_session_persistence \
+	$(UNIT_DIR)/test_method_handlers
 
 # TDD stub tests (expected to fail - informational only)
-STUB_TESTS = \
-	$(UNIT_DIR)/test_method_handlers
+STUB_TESTS = 
 
 # Integration tests (require ./webserv running - informational only)
 INTEGRATION_UNIT_TESTS = \
@@ -157,7 +157,15 @@ $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.c
 		../srcs/utils/StringUtils.cpp
 
 $(UNIT_DIR)/test_method_handlers: $(UNIT_DIR)/test_method_handlers.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -o $@ $<
+	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -I../includes/config -I../includes/utils -I../includes/server -I../includes/http -I../includes/cgi -o $@ $< \
+		../srcs/server/RequestRouter.cpp \
+		../srcs/server/MethodHandler.cpp \
+		../srcs/utils/CgiUtils.cpp \
+		../srcs/utils/HttpUtils.cpp \
+		../srcs/utils/StringUtils.cpp \
+		../srcs/http/HttpResponseBuilder.cpp \
+		../srcs/http/HttpResponse.cpp \
+		../srcs/http/MimeTypes.cpp
 
 UTILS_SRCS = ../srcs/utils/CgiUtils.cpp ../srcs/utils/HttpUtils.cpp ../srcs/utils/Logger.cpp ../srcs/utils/ParsingUtils.cpp ../srcs/utils/StringUtils.cpp
 HTTP_SRCS = ../srcs/http/HttpRequest.cpp
@@ -220,6 +228,8 @@ $(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWO
 		-I../includes/http -I../includes/server -I../includes/cgi \
 		-o $@ $< \
 		../srcs/server/Server.cpp \
+		../srcs/server/RequestRouter.cpp \
+		../srcs/server/MethodHandler.cpp \
 		../srcs/utils/Logger.cpp \
 		../srcs/utils/CgiUtils.cpp \
 		../srcs/config/ConfigLexer.cpp \

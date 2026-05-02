@@ -8,8 +8,10 @@
 
 #include <Config.hpp>
 #include <ServerConfig.hpp>
+#include <LocationConfig.hpp>
 #include <Connection.hpp>
 #include <CgiHandler.hpp>
+#include <RequestRouter.hpp>
 
 class Server {
     public:
@@ -37,7 +39,8 @@ class Server {
         void _set_pollout(int fd, bool enable);
         void _check_timeouts();
         bool _queue_parsed_request_response(int fd);
-        std::string _serve_static_response(const HttpRequest& req, const std::string& conn_header) const;
+        std::string _serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const std::string& conn_header) const;
+        std::string _generate_directory_listing(const std::string& physicalPath) const;
 
 
 };
