@@ -82,14 +82,15 @@ class WebservTestCase(unittest.TestCase):
             # Check if process died
             if self._server_proc.poll() is not None:
                 return False
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(1.0)
                 sock.connect((self.server_host, self.server_port))
-                sock.close()
                 return True
             except (socket.error, OSError):
                 time.sleep(SERVER_START_POLL_INTERVAL)
+            finally:
+                sock.close()
         return False
 
     def _kill_server(self):
@@ -104,6 +105,10 @@ class WebservTestCase(unittest.TestCase):
                     self._server_proc.wait(timeout=2)
                 except Exception:
                     pass
+            if self._server_proc.stdout is not None:
+                self._server_proc.stdout.close()
+            if self._server_proc.stderr is not None:
+                self._server_proc.stderr.close()
             self._server_proc = None
 
     def http_get(self, path, host=None, port=None):

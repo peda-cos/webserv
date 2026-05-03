@@ -50,7 +50,7 @@ TEST(ConfigParser, ValidSingleServerBlock)
 	std::string conf =
 		"server {\n"
 		"    listen 127.0.0.1:8080;\n"
-		"    root /var/www/html;\n"
+		"    root www;\n"
 		"}\n";
 
 	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
@@ -137,15 +137,15 @@ TEST(ConfigParser, LocationSubDirectives)
 		"    listen 0.0.0.0:8080;\n"
 		"\n"
 		"    location /upload {\n"
-		"        root /var/www/upload;\n"
+		"        root www/upload;\n"
 		"        index upload.html;\n"
 		"        autoindex on;\n"
 		"        limit_except POST DELETE;\n"
-		"        upload_store /var/www/uploads;\n"
+		"        upload_store www/uploads;\n"
 		"    }\n"
 		"\n"
 		"    location /cgi-bin {\n"
-		"        root /var/www/cgi;\n"
+		"        root www/cgi;\n"
 		"        cgi_pass .py /usr/bin/python3;\n"
 		"    }\n"
 		"}\n";
@@ -157,18 +157,18 @@ TEST(ConfigParser, LocationSubDirectives)
 	/* First location: /upload */
 	const LocationConfig& upload = result[0].locations[0];
 	ASSERT_EQ(std::string("/upload"), upload.path);
-	ASSERT_EQ(std::string("/var/www/upload"), upload.root);
+	ASSERT_EQ(std::string("www/upload"), upload.root);
 	ASSERT_EQ(std::string("upload.html"), upload.index);
 	ASSERT_EQ(ON, upload.autoindex);
 	ASSERT_EQ(2, static_cast<int>(upload.limit_except.size()));
 	ASSERT_EQ(POST, upload.limit_except[0]);
 	ASSERT_EQ(DELETE, upload.limit_except[1]);
-	ASSERT_EQ(std::string("/var/www/uploads"), upload.upload_store);
+	ASSERT_EQ(std::string("www/uploads"), upload.upload_store);
 
 	/* Second location: /cgi-bin */
 	const LocationConfig& cgi = result[0].locations[1];
 	ASSERT_EQ(std::string("/cgi-bin"), cgi.path);
-	ASSERT_EQ(std::string("/var/www/cgi"), cgi.root);
+	ASSERT_EQ(std::string("www/cgi"), cgi.root);
 	ASSERT_EQ(1, static_cast<int>(cgi.cgi_handlers.size()));
 	ASSERT_TRUE(cgi.cgi_handlers.find(".py") != cgi.cgi_handlers.end());
 	ASSERT_EQ(std::string("/usr/bin/python3"), cgi.cgi_handlers.at(".py"));
@@ -181,7 +181,7 @@ TEST(ConfigParser, MissingListenUsesDefaults)
 {
 	std::string conf =
 		"server {\n"
-		"    root /var/www/html;\n"
+		"    root www;\n"
 		"}\n";
 
 	std::vector<ServerConfig> result = TestConfigParser::parse(conf);

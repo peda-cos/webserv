@@ -25,10 +25,9 @@ class TestErrorPages(WebservTestCase):
         # server is started.
         if os.path.exists(TEST_DIR):
             shutil.rmtree(TEST_DIR)
-        os.makedirs(os.path.join(TEST_DIR, "errors"))
-
-        with open(os.path.join(TEST_DIR, "errors", "404.html"), "w") as f:
-            f.write("<h1>Custom 404</h1>\n")
+        os.makedirs(TEST_DIR)
+        with open(os.path.join(TEST_DIR, "404.txt"), "w") as f:
+            f.write("Custom 404 Text\n")
 
         super(TestErrorPages, self).setUp()
 
@@ -50,7 +49,7 @@ class TestErrorPages(WebservTestCase):
         self.assertEqual(status, 404)
 
         body_text = body.decode("utf-8", errors="replace")
-        self.assertIn("Custom 404", body_text)
+        self.assertIn("Custom 404 Text", body_text)
 
 
 if __name__ == "__main__":

@@ -11,10 +11,43 @@
 #include <fstream>
 #include <cstdio>
 #include <cstdlib>
+#include <sys/wait.h>
+#include <errno.h>
+#include <CgiResult.hpp>
 
 namespace {
     bool pythonAvailable() {
         return system("which python3 > /dev/null 2>&1") == 0;
+    }
+
+    CgiResult sync_execute(CgiExecutor& executor, const HttpRequest& req, const LocationConfig& config) {
+        CgiProcessInfo info = executor.start_cgi(req, config);
+        std::string output;
+        char buffer[4096];
+        size_t body_written = 0;
+        bool stdin_closed = false;
+        bool stdout_done = false;
+        while (!stdout_done) {
+            if (!stdin_closed) {
+                if (body_written < req.body.length()) {
+                    ssize_t wn = write(info.stdin_fd, req.body.c_str() + body_written, req.body.length() - body_written);
+                    if (wn > 0) body_written += wn;
+                    else if (wn == -1 && errno != EAGAIN && errno != EWOULDBLOCK) { close(info.stdin_fd); stdin_closed = true; }
+                } else { close(info.stdin_fd); stdin_closed = true; }
+            }
+            ssize_t rn = read(info.stdout_fd, buffer, sizeof(buffer));
+            if (rn > 0) output.append(buffer, rn);
+            else if (rn == 0) stdout_done = true;
+            else if (rn == -1 && errno != EAGAIN && errno != EWOULDBLOCK) stdout_done = true;
+            if (!stdout_done) usleep(100);
+        }
+        int status = 0;
+        waitpid(info.pid, &status, 0);
+        close(info.stdout_fd);
+        if (!stdin_closed) close(info.stdin_fd);
+        CgiResult::Status res_status = CgiResult::SUCCESS;
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) res_status = CgiResult::EXECUTION_ERROR;
+        return CgiResult(res_status, output);
     }
 }
 
@@ -50,7 +83,7 @@ TEST(SessionPersistence, CookieFlow) {
     CgiExecutor executor;
 
     // --- FIRST VISIT (No Cookie) ---
-    CgiResult result1 = executor.execute(req, config);
+    CgiResult result1 = sync_execute(executor, req, config);
     
     // Validate Visit Count 1
     ASSERT_TRUE(result1.output.find("Visit Count: 1") != std::string::npos);
@@ -80,7 +113,7 @@ TEST(SessionPersistence, CookieFlow) {
         .setVersion("HTTP/1.1")
         .addHeader("Cookie", "session_id=" + sessionId);
 
-    CgiResult result2 = executor.execute(req2, config);
+    CgiResult result2 = sync_execute(executor, req2, config);
     
     // Validate Visit Count 2
     ASSERT_TRUE(result2.output.find("Visit Count: 2") != std::string::npos);
@@ -94,7 +127,7 @@ TEST(SessionPersistence, CookieFlow) {
         .setVersion("HTTP/1.1")
         .addHeader("Cookie", "session_id=nonexistent_session_999");
 
-    CgiResult result3 = executor.execute(req3, config);
+    CgiResult result3 = sync_execute(executor, req3, config);
     
     // Should reset count to 1 and generate a new ID
     ASSERT_TRUE(result3.output.find("Visit Count: 1") != std::string::npos);
@@ -121,7 +154,7 @@ TEST(SessionPersistence, MultipleCookies) {
     // First visit to get an ID
     HttpRequest req1;
     req1.setMethod("GET").setUriPath("/www/cgi/session.py").setVersion("HTTP/1.1");
-    CgiResult res1 = executor.execute(req1, config);
+    CgiResult res1 = sync_execute(executor, req1, config);
     
     std::string sidMarker = "session_id=";
     size_t start = res1.output.find(sidMarker) + sidMarker.length();
@@ -135,7 +168,7 @@ TEST(SessionPersistence, MultipleCookies) {
         .setVersion("HTTP/1.1")
         .addHeader("Cookie", "theme=dark; session_id=" + sessionId + "; lang=en-US");
 
-    CgiResult res2 = executor.execute(req2, config);
+    CgiResult res2 = sync_execute(executor, req2, config);
     
     ASSERT_TRUE(res2.output.find("Visit Count: 2") != std::string::npos);
     ASSERT_TRUE(res2.output.find("Session ID: " + sessionId) != std::string::npos);
@@ -169,7 +202,7 @@ TEST(SessionPersistence, CorruptedSessionFile) {
        .setVersion("HTTP/1.1")
        .addHeader("Cookie", "session_id=" + corruptedId);
 
-    CgiResult res = executor.execute(req, config);
+    CgiResult res = sync_execute(executor, req, config);
     
     // The script should handle the ValueError and reset visits to 0 + 1 = 1
     ASSERT_TRUE(res.output.find("Visit Count: 1") != std::string::npos);

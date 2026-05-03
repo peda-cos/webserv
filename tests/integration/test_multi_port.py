@@ -64,14 +64,15 @@ class TestMultiPort(WebservTestCase):
             for port in (PORT_A, PORT_B):
                 if port in ports_ready:
                     continue
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.settimeout(1.0)
                     sock.connect((self.server_host, port))
-                    sock.close()
                     ports_ready.add(port)
                 except (socket.error, OSError):
                     pass
+                finally:
+                    sock.close()
             if len(ports_ready) == 2:
                 return True
             time.sleep(SERVER_START_POLL_INTERVAL)

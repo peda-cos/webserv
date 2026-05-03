@@ -43,7 +43,7 @@ report() {
 echo "--- Checking SINGLE_POLL_INSTANCE ---"
 
 poll_hits=""
-poll_hits=$(grep -rn -E 'poll\(|epoll_wait\(|kevent\(' "$ROOT/srcs/" --include='*.cpp' 2>/dev/null || true)
+poll_hits=$(grep -rn -E '\bpoll\(|\bepoll_wait\(|\bkevent\(' "$ROOT/srcs/" --include='*.cpp' 2>/dev/null || true)
 
 poll_count=0
 if [ -n "$poll_hits" ]; then
