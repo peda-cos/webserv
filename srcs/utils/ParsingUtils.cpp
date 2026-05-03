@@ -18,6 +18,7 @@ static std::map<std::string, ConfigDirectiveType> createServerDirectives() {
     map["client_max_body_size"] = SERVER_CLIENT_MAX_BODY_SIZE;
     map["error_page"] = SERVER_ERROR_PAGE;
     map["root"] = SERVER_ROOT;
+    map["index"] = SERVER_INDEX;
     return map;
 }
 

@@ -15,7 +15,7 @@ ConfigParserServer::ConfigParserServer(ConfigParser &parser): parser(parser) {
     server_config.autoindex = OFF;
     server_config.limit_except = std::vector<HttpMethod>();
     server_config.locations = std::vector<LocationConfig>();
-    server_config.root = "/var/www/html";
+    server_config.root = "www";
     server_config.index = std::vector<std::string>();
 }
 
@@ -101,6 +101,18 @@ void ConfigParserServer::parse_server_root() {
     parser.validates_extra_arguments_in("root");
 }
 
+void ConfigParserServer::parse_server_index() {
+    parser.validates_directive_value_for("index");
+    while (parser.current_token.type == WORD) {
+        server_config.index.push_back(parser.current_token.value);
+        parser.advance();
+    }
+    if (server_config.index.empty())
+        throw_unexpected_token_error("index directive requires at least one value");
+    if (parser.current_token.type != SEMICOLON)
+        throw_unexpected_token_error("Unexpected token after 'index' directive value: " + parser.current_token.value);
+}
+
 ServerConfig ConfigParserServer::parse() {
     parser.advance();
     parser.validates_char_block_at("server");
@@ -114,10 +126,14 @@ ServerConfig ConfigParserServer::parse() {
             case SERVER_NAMES: parse_server_names(); break;
             case SERVER_CLIENT_MAX_BODY_SIZE: parse_client_max_body_size(); break;
             case SERVER_ERROR_PAGE: parse_error_page(); break;
+            case SERVER_INDEX: parse_server_index(); break;
             case SERVER_LOCATION: {
                 ConfigParserLocation location_parser(parser);
                 location_parser.inherit_error_pages_from_server(server_config.error_pages);
                 LocationConfig location_config = location_parser.parse();
+                if (location_config.index.empty() && !server_config.index.empty()) {
+                    location_config.index = server_config.index[0];
+                }
                 server_config.locations.push_back(location_config);
                 continue;
             }

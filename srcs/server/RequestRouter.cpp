@@ -37,13 +37,14 @@ bool RequestRouter::isMethodAllowed(const std::string& method, const LocationCon
 }
 
 std::string RequestRouter::resolvePhysicalPath(const LocationConfig& loc, const std::string& uriPath, const ServerConfig& server) {
-    std::string root = loc.root.empty() ? server.root : loc.root;
+    bool has_explicit_root = !loc.root.empty();
+    std::string root = has_explicit_root ? loc.root : server.root;
     if (root.empty()) {
         root = "www";
     }
 
     std::string relative = uriPath;
-    if (!loc.path.empty() && CgiUtils::starts_with(uriPath, loc.path)) {
+    if (has_explicit_root && !loc.path.empty() && CgiUtils::starts_with(uriPath, loc.path)) {
         relative = uriPath.substr(loc.path.length());
         if (relative.empty()) {
             relative = "/";
@@ -85,6 +86,15 @@ bool RequestRouter::isCgiRequest(const std::string& physicalPath, const Location
 }
 
 RequestRouter::TargetType RequestRouter::classifyRequest(const std::string& physicalPath, const LocationConfig& loc) {
+    if (!loc.cgi_handlers.empty()) {
+        std::string ext;
+        size_t slash_pos = 0;
+        if (CgiUtils::extract_extension(physicalPath, ext, slash_pos) &&
+            loc.cgi_handlers.find(ext) == loc.cgi_handlers.end()) {
+            return TARGET_NOT_FOUND;
+        }
+    }
+
     if (isCgiRequest(physicalPath, loc)) {
         return TARGET_CGI;
     }

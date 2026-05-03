@@ -47,8 +47,9 @@ class Server {
         void _check_timeouts();
         void _check_cgi_exits();
         bool _queue_parsed_request_response(int fd);
-        std::string _serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const std::string& conn_header) const;
+        std::string _serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const ServerConfig& server, const std::string& conn_header) const;
         std::string _generate_directory_listing(const std::string& physicalPath) const;
+        std::string _build_error_response(int code, const ServerConfig& server, const LocationConfig* loc, const std::string& conn_header) const;
 
 
 };
