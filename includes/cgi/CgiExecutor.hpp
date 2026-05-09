@@ -2,15 +2,18 @@
 #define CGI_EXECUTOR_HPP
 
 #include <sys/types.h>
-#include <CgiResult.hpp>
 #include <HttpRequest.hpp>
 #include <LocationConfig.hpp>
 
+struct CgiProcessInfo {
+    pid_t pid;
+    int   stdin_fd;
+    int   stdout_fd;
+};
+
 class CgiExecutor {
-    private:
-        pid_t pid;
     public:
-        CgiResult execute(const HttpRequest& request, const LocationConfig& location_config) const;
+        CgiProcessInfo start_cgi(const HttpRequest& request, const LocationConfig& location_config) const;
 };
 
 #endif

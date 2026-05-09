@@ -8,7 +8,7 @@
 
 ConfigParserLocation::ConfigParserLocation(ConfigParser &parser) : parser(parser) {
     location_config.path = "/";
-    location_config.root = "/var/www/html";
+    location_config.root = "";
     location_config.index = "";
     location_config.autoindex = OFF;
     location_config.limit_except = std::vector<HttpMethod>();

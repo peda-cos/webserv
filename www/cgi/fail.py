@@ -2,5 +2,5 @@
 import sys
 print('Content-Type: text/plain')
 print('')
-print('about to fail')
+print('Python says: I failed! :c')
 sys.exit(1)

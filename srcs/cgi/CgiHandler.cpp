@@ -3,7 +3,6 @@
 #include <StringUtils.hpp>
 #include <Logger.hpp>
 #include <HttpUtils.hpp>
-#include <CgiException.hpp>
 #include <CgiUtils.hpp>
 
 #include <sys/stat.h>
@@ -30,24 +29,6 @@ namespace {
         }
 
         return best_match;
-    }
-
-    static std::string reason_phrase(int status_code) {
-        switch (status_code) {
-            case 200: return "OK";
-            case 201: return "Created";
-            case 204: return "No Content";
-            case 301: return "Moved Permanently";
-            case 302: return "Found";
-            case 400: return "Bad Request";
-            case 403: return "Forbidden";
-            case 404: return "Not Found";
-            case 405: return "Method Not Allowed";
-            case 413: return "Payload Too Large";
-            case 500: return "Internal Server Error";
-            case 504: return "Gateway Timeout";
-            default: return "Internal Server Error";
-        }
     }
 
     static bool find_body_separator(const std::string& raw_output,
@@ -109,14 +90,6 @@ namespace {
 
 CgiHandler::CgiHandler() : _executor() {}
 CgiHandler::~CgiHandler() {}
-
-CgiParsedOutput CgiHandler::build_error_output(int status_code, const std::string& error_msg) const {
-    CgiParsedOutput output;
-    output.status_code = status_code;
-    output.body = error_msg.empty() ? reason_phrase(status_code) : error_msg;
-    output.headers.push_back(std::make_pair("Content-Type", "text/html"));
-    return output;
-}
 
 bool CgiHandler::is_cgi_request(const HttpRequest& req, const ServerConfig& server_config) const {
     const LocationConfig* loc = find_best_matching_location(req, server_config);
@@ -181,34 +154,19 @@ CgiParsedOutput CgiHandler::parse_cgi_output(const std::string& raw_output, CgiR
     return parsed;
 }
 
-CgiParsedOutput CgiHandler::handle_request(const HttpRequest& req,
-    const ServerConfig& server_config) const
+int CgiHandler::start_cgi(const HttpRequest& req,
+    const ServerConfig& server_config, CgiProcessInfo& out_info) const
 {
-    if (req.errorCode != 0) {
-        return build_error_output(req.errorCode, "");
-    }
-
     const LocationConfig* location_config = find_best_matching_location(req, server_config);
     if (!location_config) {
-        return build_error_output(404, "Location not found");
+        return 404;
     }
 
     int validation_status = validate_request(req, server_config, *location_config);
     if (validation_status != 0) {
-        return build_error_output(validation_status, "");
+        return validation_status;
     }
 
-    CgiResult result(CgiResult::EXECUTION_ERROR, "CGI execution failed");
-    try {
-        result = _executor.execute(req, *location_config);
-    } catch (const CgiException& e) {
-        return build_error_output(500, e.what());
-    }
-
-    CgiParsedOutput parsed = parse_cgi_output(result.output, result.status);
-    if (parsed.status_code >= 400 && parsed.body.empty()) {
-        parsed.body = reason_phrase(parsed.status_code);
-    }
-
-    return parsed;
+    out_info = _executor.start_cgi(req, *location_config);
+    return 0;
 }

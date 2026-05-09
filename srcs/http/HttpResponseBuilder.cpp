@@ -62,7 +62,6 @@ std::string HttpResponseBuilder::build() const
 
     response.addHeader("Content-Type", _contentType);
 
-    /* Headers customizados */
     for (std::size_t i = 0; i < _headers.size(); ++i) {
         response.addHeader(_headers[i].first, _headers[i].second);
     }
@@ -95,14 +94,18 @@ std::string HttpResponseBuilder::reasonPhraseFor(int code)
 }
 
 
-std::string HttpResponseBuilder::_defaultErrorHtml(int code, const std::string& reason)
+std::string HttpResponseBuilder::buildErrorBody(int code, const std::string& message)
 {
+    std::string reason = reasonPhraseFor(code);
     std::string codeStr = StringUtils::to_string(code);
     std::string html;
     html += "<html>\r\n";
     html += "<head><title>" + codeStr + " " + reason + "</title></head>\r\n";
     html += "<body>\r\n";
     html += "<center><h1>" + codeStr + " " + reason + "</h1></center>\r\n";
+    if (!message.empty()) {
+        html += "<center><p>" + message + "</p></center>\r\n";
+    }
     html += "<hr><center>webserv</center>\r\n";
     html += "</body>\r\n";
     html += "</html>\r\n";
@@ -112,33 +115,21 @@ std::string HttpResponseBuilder::_defaultErrorHtml(int code, const std::string& 
 
 std::string HttpResponseBuilder::buildErrorPage(int code, const std::string& customBody)
 {
-    std::string reason = reasonPhraseFor(code);
-    std::string body;
-
-    if (customBody.empty()) {
-        body = _defaultErrorHtml(code, reason);
-    } else {
-        body = customBody;
-    }
-
     return HttpResponseBuilder()
-        .setStatus(code, reason)
+        .setStatus(code)
         .setContentType("text/html")
-        .setBody(body)
+        .setBody(buildErrorBody(code, customBody))
         .setConnection("close")
         .build();
 }
 
 std::string HttpResponseBuilder::buildRedirect(int code, const std::string& location)
 {
-    std::string reason = reasonPhraseFor(code);
-    std::string body   = _defaultErrorHtml(code, reason);
-
     return HttpResponseBuilder()
-        .setStatus(code, reason)
+        .setStatus(code)
         .setHeader("Location", location)
         .setContentType("text/html")
-        .setBody(body)
+        .setBody(buildErrorBody(code, ""))
         .setConnection("close")
         .build();
 }

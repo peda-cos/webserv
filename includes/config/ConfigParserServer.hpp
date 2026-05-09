@@ -17,6 +17,7 @@ class ConfigParserServer {
         void parse_server_names();
         void parse_client_max_body_size();
         void parse_error_page();
+        void parse_server_index();
         void throw_unexpected_token_error(const std::string& message);
     public:
         ConfigParserServer(ConfigParser &parser);

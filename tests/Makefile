@@ -48,12 +48,19 @@ static:
 # --- Unit tests ---
 unit: $(ALL_UNIT_BINS)
 	@pure_passed=0; pure_failed=0; stub_count=0; integ_count=0; integ_failed=0; \
+	passed_tests=0; failed_tests=0; total_tests=0; \
 	\
 	for bin in $(PURE_UNIT_TESTS); do \
 		name=$$(basename $$bin); \
 		output=$$(./$$bin 2>&1); \
 		if echo "$$output" | grep -q "0 failed"; then \
 			summary=$$(echo "$$output" | grep "passed, 0 failed" | tail -1); \
+			passed=$$(echo "$$summary" | awk '{print $$1}'); \
+			failed=$$(echo "$$summary" | awk '{print $$3}'); \
+			total=$$(echo "$$summary" | awk '{print $$5}'); \
+			passed_tests=$$((passed_tests + passed)); \
+			failed_tests=$$((failed_tests + failed)); \
+			total_tests=$$((total_tests + total)); \
 			echo ""; \
 			echo " $(GREEN)✓ PASS$(RESET)  $$name"; \
 			echo "      $$summary"; \
@@ -85,7 +92,14 @@ unit: $(ALL_UNIT_BINS)
 	\
 	for bin in $(INTEGRATION_UNIT_TESTS); do \
 		name=$$(basename $$bin); \
-		output=$$(./$$bin 2>&1); \
+		if [ "$$name" = "test_connection_loop" ]; then \
+			tmpfile=$$(mktemp); \
+			./$$bin 2>&1 | tee $$tmpfile; \
+			output=$$(cat $$tmpfile); \
+			rm -f $$tmpfile; \
+		else \
+			output=$$(./$$bin 2>&1); \
+		fi; \
 		if echo "$$output" | grep -q "\[SKIP\]"; then \
 			echo ""; \
 			echo " $(YELLOW)◐ SKIP$(RESET)  $$name"; \
@@ -96,6 +110,10 @@ unit: $(ALL_UNIT_BINS)
 			if [ -n "$$summary" ]; then \
 				passed=$$(echo "$$summary" | awk '{print $$1}'); \
 				failed=$$(echo "$$summary" | awk '{print $$3}'); \
+				total=$$(echo "$$summary" | awk '{print $$5}'); \
+				passed_tests=$$((passed_tests + passed)); \
+				failed_tests=$$((failed_tests + failed)); \
+				total_tests=$$((total_tests + total)); \
 				if [ "$$failed" = "0" ]; then \
 					echo ""; \
 					echo " $(GREEN)✓ PASS$(RESET)  $$name"; \
@@ -117,12 +135,15 @@ unit: $(ALL_UNIT_BINS)
 	\
 	echo ""; \
 	echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
+	suite_total=$$((pure_passed + pure_failed + stub_count + integ_count)); \
+	suite_failed=$$((pure_failed + integ_failed)); \
+	suite_passed=$$((suite_total - suite_failed - stub_count)); \
 	if [ $$integ_failed -gt 0 ]; then \
-		echo "Test Suites: $(GREEN)✓ $$pure_passed passed$(RESET), $(RED)✗ $$integ_failed integration failed$(RESET), 1 total"; \
+		echo "Test Suites: $(GREEN)✓ $$suite_passed passed$(RESET), $(RED)✗ $$suite_failed failed$(RESET), $$suite_total total"; \
 	else \
-		echo "Test Suites: $(GREEN)✓ 1 passed$(RESET), 1 total"; \
+		echo "Test Suites: $(GREEN)✓ $$suite_passed passed$(RESET), 0 failed, $$suite_total total"; \
 	fi; \
-	echo "Tests:       $(GREEN)✓ $$pure_passed passed$(RESET), $$stub_count stub, $$integ_count integration"; \
+	echo "Tests:       $(GREEN)✓ $$passed_tests passed$(RESET), $(RED)✗ $$failed_tests failed$(RESET), $$total_tests total"; \
 	echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
 	echo ""
 

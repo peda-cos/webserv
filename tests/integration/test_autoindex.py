@@ -47,7 +47,12 @@ class TestAutoindex(WebservTestCase):
 
     def test_directory_listing(self):
         """GET / with autoindex on should return 200 and list all files."""
+        import time
+        time.sleep(0.2)
         status, headers, body = self.http_get("/")
+        if status != 200:
+            print("\n[DEBUG] Server returned status %d" % status)
+            print("[DEBUG] Body: %s" % body.decode("utf-8", errors="replace"))
         self.assertEqual(status, 200)
 
         body_text = body.decode("utf-8", errors="replace")

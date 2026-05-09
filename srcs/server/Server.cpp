@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+#include <sys/wait.h>
 #include <cstring>
 #include <cctype>
 #include <cstdio>
@@ -30,10 +31,85 @@
 #define CONNECTION_TIMEOUT_SEC  5
 
 namespace {
-    static void append_cors_headers(HttpResponseBuilder& builder) {
+    void append_cors_headers(HttpResponseBuilder& builder) {
         builder.setHeader("Access-Control-Allow-Origin", "*");
         builder.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, HEAD, PUT, OPTIONS");
         builder.setHeader("Access-Control-Allow-Headers", "*");
+    }
+
+    std::string build_cgi_error(int code, const std::string& message, const std::string& extra = "") {
+        HttpResponseBuilder builder;
+        std::string reason = HttpResponseBuilder::reasonPhraseFor(code);
+        std::string body = "<html><body style='font-family:sans-serif;'><h1>" + StringUtils::to_string(code) + " " + reason + "</h1>";
+        if (!message.empty()) {
+            body += "<p>" + message + "</p>";
+        }
+        if (!extra.empty()) {
+            body += "<div style='background:#f8f9fa;padding:15px;border-left:5px solid #dc3545;margin-top:20px;'>";
+            body += "<strong>Partial CGI Output:</strong><pre style='white-space:pre-wrap;'>" + extra + "</pre></div>";
+        }
+        body += "</body></html>";
+        builder.setStatus(code)
+               .setContentType("text/html")
+               .setBody(body)
+               .setConnection("close");
+        append_cors_headers(builder);
+        return builder.build();
+    }
+
+    bool read_file_content(const std::string& path, std::string& out) {
+        std::ifstream file(path.c_str(), std::ios::binary);
+        if (!file.is_open()) {
+            return false;
+        }
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        out = ss.str();
+        return true;
+    }
+
+    bool resolve_error_page_file(const std::string& configured_path,
+        const LocationConfig* loc,
+        const ServerConfig& server,
+        std::string& out_path)
+    {
+        if (configured_path.empty()) {
+            return false;
+        }
+        if (configured_path[0] == '@') {
+            return false;
+        }
+
+
+        struct stat st;
+        if (stat(configured_path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+            out_path = configured_path;
+            return true;
+        }
+
+        LocationConfig fallback;
+        if (loc) {
+            fallback = *loc;
+        } else {
+            fallback.path = "/";
+            fallback.root = server.root;
+        }
+
+        std::string candidate = RequestRouter::resolvePhysicalPath(fallback, configured_path, server);
+        if (RequestRouter::isPathTraversal(candidate)) {
+            return false;
+        }
+        if (stat(candidate.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+            out_path = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool is_http_url(const std::string& value) {
+        std::string lower = StringUtils::to_lower(value);
+        return CgiUtils::starts_with(lower, "http://") || CgiUtils::starts_with(lower, "https://");
     }
 }
 
@@ -149,17 +225,18 @@ void Server::run() {
         if (_poll_fds.empty())
             break;
 
-        int ready = poll(&_poll_fds[0], _poll_fds.size(), CONNECTION_TIMEOUT_SEC * 1000);
+        int ready = poll(&_poll_fds[0], _poll_fds.size(), 10);
 
         if (ready < 0) {
             Logger::error("poll failed — stopping server");
             break;
         }
 
-        if (ready == 0) {
-            _check_timeouts();
+        _check_timeouts();
+        _check_cgi_exits();
+
+        if (ready == 0)
             continue;
-        }
 
         size_t current_size = _poll_fds.size();
         for (size_t i = 0; i < current_size && i < _poll_fds.size(); ++i) {
@@ -170,6 +247,14 @@ void Server::run() {
 
             if (_is_listening_fd(fd)) {
                 _accept_new_connection(fd);
+            } else if (_cgi_fd_to_client_fd.count(fd)) {
+                if (_poll_fds[i].revents & POLLIN) {
+                    _handle_cgi_output(fd);
+                } else if (_poll_fds[i].revents & POLLOUT) {
+                    _handle_cgi_input(fd);
+                } else if (_poll_fds[i].revents & (POLLHUP | POLLERR)) {
+                    _handle_cgi_output(fd);
+                }
             } else {
                 if (_poll_fds[i].revents & POLLHUP) {
                     _close_connection(fd);
@@ -239,11 +324,16 @@ void Server::_read_from_client(int fd) {
     Connection& conn = _connections[fd];
     conn.last_activity = time(NULL);
     std::string data(buf, static_cast<size_t>(n));
-    conn.read_buffer += data;
 
-    if (conn.read_buffer.size() > MAX_HEADER_BUFFER_SIZE && !conn.parser.isComplete()) {
-        _close_connection(fd);
-        return;
+    if (!conn.headers_complete) {
+        conn.read_buffer += data;
+        if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
+            conn.headers_complete = true;
+            conn.read_buffer.clear();
+        } else if (conn.read_buffer.size() > MAX_HEADER_BUFFER_SIZE) {
+            _close_connection(fd);
+            return;
+        }
     }
 
     conn.parser.feed(data);
@@ -256,7 +346,9 @@ void Server::_read_from_client(int fd) {
         return;
     }
 
-    _queue_parsed_request_response(fd);
+    if (conn.cgi_pid == -1) {
+        _queue_parsed_request_response(fd);
+    }
 }
 
 void Server::_write_to_client(int fd) {
@@ -291,18 +383,65 @@ void Server::_write_to_client(int fd) {
     }
 }
 
-void Server::_close_connection(int fd) {
-    shutdown(fd, SHUT_RDWR);
-    close(fd);
-    _connections.erase(fd);
+void Server::_cleanup_cgi(int fd) {
+    Connection& conn = _connections[fd];
+    if (conn.cgi_pid != -1) {
+        kill(conn.cgi_pid, SIGKILL);
+        waitpid(conn.cgi_pid, NULL, WNOHANG);
+        conn.cgi_pid = -1;
+    }
+    if (conn.cgi_in_fd != -1) {
+        _cgi_fd_to_client_fd.erase(conn.cgi_in_fd);
+        _remove_from_poll(conn.cgi_in_fd);
+        close(conn.cgi_in_fd);
+        conn.cgi_in_fd = -1;
+    }
+    if (conn.cgi_out_fd != -1) {
+        _remove_from_poll(conn.cgi_out_fd);
+        _cgi_fd_to_client_fd.erase(conn.cgi_out_fd);
+        close(conn.cgi_out_fd);
+        conn.cgi_out_fd = -1;
+    }
+    conn.cgi_state = CGI_NONE;
+    conn.cgi_response_raw = "";
+    conn.cgi_body_bytes_sent = 0;
+}
 
+void Server::_prepare_for_next_request(int fd) {
+    Connection& conn = _connections[fd];
+    _cleanup_cgi(fd);
+    conn.parser.reset();
+        conn.headers_complete = false;
+        conn.read_buffer.clear();
+        conn.pending_req = HttpRequest();
+}
+
+void Server::_remove_from_poll(int fd) {
     for (size_t i = 0; i < _poll_fds.size(); ++i) {
         if (_poll_fds[i].fd == fd) {
             _poll_fds.erase(_poll_fds.begin() + static_cast<long>(i));
             break;
         }
     }
+}
 
+void Server::_close_connection(int fd) {
+    if (_connections.count(fd)) {
+        _cleanup_cgi(fd);
+    }
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
+    _connections.erase(fd);
+    _remove_from_poll(fd);
+    for (size_t i = 0; i < _poll_fds.size(); ) {
+        if (_cgi_fd_to_client_fd.count(_poll_fds[i].fd) == 0 && 
+            !_is_listening_fd(_poll_fds[i].fd) && 
+            _connections.count(_poll_fds[i].fd) == 0) {
+             _poll_fds.erase(_poll_fds.begin() + static_cast<long>(i));
+        } else {
+            i++;
+        }
+    }
     Logger::info("Connection closed");
 }
 
@@ -324,14 +463,29 @@ void Server::_check_timeouts() {
 
     for (std::map<int, Connection>::iterator it = _connections.begin();
          it != _connections.end(); ++it) {
-        if (now - it->second.last_activity > CONNECTION_TIMEOUT_SEC) {
+        Connection& conn = it->second;
+        if (conn.cgi_pid != -1) {
+            if (now - conn.cgi_start_time > CGI_TIMEOUT_SECONDS) {
+                to_close.push_back(it->first);
+            }
+        } else if (now - conn.last_activity > CONNECTION_TIMEOUT_SEC) {
             to_close.push_back(it->first);
         }
     }
 
     for (size_t i = 0; i < to_close.size(); ++i) {
-        Logger::info("Closing idle connection (timeout)");
-        _close_connection(to_close[i]);
+        Connection& conn = _connections[to_close[i]];
+        if (conn.cgi_pid != -1) {
+            Logger::info("CGI execution timed out (504)");
+            conn.write_buffer = build_cgi_error(504, "CGI execution timed out");
+            _set_pollout(to_close[i], true);
+            conn.keep_alive = false;
+            _prepare_for_next_request(to_close[i]);
+            conn.last_activity = now;
+        } else {
+            Logger::info("Closing idle connection (timeout)");
+            _close_connection(to_close[i]);
+        }
     }
 }
 
@@ -355,75 +509,131 @@ bool Server::_queue_parsed_request_response(int fd) {
         }
     }
 
+    conn.parser.reset();
+    conn.headers_complete = false;
+    conn.read_buffer.clear();
+    if (!remainder.empty()) {
+        conn.parser.feed(remainder);
+        conn.read_buffer = remainder;
+        if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
+            conn.headers_complete = true;
+            conn.read_buffer.clear();
+        }
+    }
+
     conn.keep_alive = !shouldClose;
-    conn.read_buffer = remainder;
 
     const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
     if (req.errorCode != 0) {
         conn.keep_alive = false;
-        conn.write_buffer = HttpResponseBuilder::buildErrorPage(req.errorCode, "");
+        if (conn.server_config) {
+            conn.write_buffer = _build_error_response(req.errorCode, *conn.server_config, NULL, "close");
+        } else {
+            conn.write_buffer = HttpResponseBuilder::buildErrorPage(req.errorCode, "");
+        }
     } else if (!conn.server_config) {
         Logger::error("No server config for connection");
         conn.write_buffer = HttpResponseBuilder::buildErrorPage(500, "");
     } else {
         const LocationConfig* loc = RequestRouter::matchLocation(*conn.server_config, req.path);
         if (!loc) {
-            conn.write_buffer = HttpResponseBuilder::buildErrorPage(404, "");
+            conn.write_buffer = _build_error_response(404, *conn.server_config, NULL, conn_header);
+        } else if (loc->return_code != 0) {
+            HttpResponseBuilder builder;
+            builder.setStatus(loc->return_code)
+                   .setHeader("Location", loc->return_url)
+                   .setContentType("text/html")
+                   .setBody(HttpResponseBuilder::buildErrorBody(loc->return_code, ""))
+                   .setConnection(conn_header);
+            append_cors_headers(builder);
+            conn.write_buffer = builder.build();
         } else if (!RequestRouter::isMethodAllowed(req.method, *loc)) {
-            conn.write_buffer = HttpResponseBuilder::buildErrorPage(405, "");
+            conn.write_buffer = _build_error_response(405, *conn.server_config, loc, conn_header);
         } else {
+            if (!loc->cgi_handlers.empty()) {
+                std::string target = req.path.empty() ? req.uri : req.path;
+                std::string ext;
+                size_t slash_pos = 0;
+                if (CgiUtils::extract_extension(target, ext, slash_pos) &&
+                    loc->cgi_handlers.find(ext) == loc->cgi_handlers.end()) {
+                    conn.write_buffer = _build_error_response(404, *conn.server_config, loc, conn_header);
+                    conn.parser.reset();
+                    conn.headers_complete = false;
+                    conn.read_buffer.clear();
+                    conn.parser.setMaxBodySize(conn.server_config->client_max_body_size);
+                    if (conn.keep_alive && !remainder.empty()) {
+                        conn.parser.feed(remainder);
+                        conn.read_buffer = remainder;
+                        if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
+                            conn.headers_complete = true;
+                            conn.read_buffer.clear();
+                        }
+                    }
+                    _set_pollout(fd, true);
+                    return true;
+                }
+            }
             std::string physicalPath = RequestRouter::resolvePhysicalPath(*loc, req.path, *conn.server_config);
             if (RequestRouter::isPathTraversal(physicalPath)) {
-                conn.write_buffer = HttpResponseBuilder::buildErrorPage(403, "");
+                conn.write_buffer = _build_error_response(403, *conn.server_config, loc, conn_header);
             } else {
                 RequestRouter::TargetType target = RequestRouter::classifyRequest(physicalPath, *loc);
                 if (target == RequestRouter::TARGET_CGI) {
+                    Logger::info("CGI Request: " + req.method + " " + req.uri + " (Resolved: " + physicalPath + ")");
+                    if (conn.cgi_pid != -1) {
+                        _cleanup_cgi(fd);
+                    }
                     CgiHandler cgi_handler;
-                    CgiParsedOutput cgi_output = cgi_handler.handle_request(req, *conn.server_config);
-                    std::vector< std::pair<std::string, std::string> > response_headers;
+                    CgiProcessInfo cgi_info;
+                    int status_code = cgi_handler.start_cgi(req, *conn.server_config, cgi_info);
+                    
+                    if (status_code != 0) {
+                        conn.write_buffer = build_cgi_error(status_code, "");
+                    } else {
+                        conn.cgi_pid = cgi_info.pid;
+                        conn.cgi_in_fd = cgi_info.stdin_fd;
+                        conn.cgi_out_fd = cgi_info.stdout_fd;
+                        conn.pending_req = req;
+                        conn.cgi_response_raw = "";
+                        conn.cgi_body_bytes_sent = 0;
+                        conn.cgi_start_time = time(NULL);
 
-                    bool has_content_type = false;
-                    for (size_t i = 0; i < cgi_output.headers.size(); ++i) {
-                        std::string key_lower = StringUtils::to_lower(cgi_output.headers[i].first);
-                        if (key_lower == "status" || key_lower == "content-length" || key_lower == "connection") {
-                            continue;
+                        if (req.method == "POST" && !req.body.empty()) {
+                            conn.cgi_state = CGI_WRITING_IN;
+                            _register_fd(conn.cgi_in_fd, POLLOUT);
+                            _cgi_fd_to_client_fd[conn.cgi_in_fd] = fd;
+                        } else {
+                            if (conn.cgi_in_fd != -1) {
+                                close(conn.cgi_in_fd);
+                                conn.cgi_in_fd = -1;
+                            }
+                            conn.cgi_state = CGI_READING_OUT;
                         }
-                        if (key_lower == "content-type") {
-                            has_content_type = true;
-                        }
-                        response_headers.push_back(cgi_output.headers[i]);
+                        
+                        _register_fd(conn.cgi_out_fd, POLLIN);
+                        _cgi_fd_to_client_fd[conn.cgi_out_fd] = fd;
+                        
+                        _set_pollout(fd, false);
+                        return true; 
                     }
-
-                    if (!has_content_type && cgi_output.status_code != 204) {
-                        response_headers.push_back(std::make_pair("Content-Type", "text/html"));
-                    }
-
-                    HttpResponseBuilder builder;
-                    builder.setStatus(cgi_output.status_code)
-                           .setBody(cgi_output.body)
-                           .setConnection(conn_header);
-
-                    for (size_t i = 0; i < response_headers.size(); ++i) {
-                        builder.setHeader(response_headers[i].first, response_headers[i].second);
-                    }
-
-                    if (!has_content_type && cgi_output.status_code != 204) {
-                        builder.setContentType("text/html");
-                    }
-
-                    append_cors_headers(builder);
-                    conn.write_buffer = builder.build();
                 } else {
-                    conn.write_buffer = _serve_static_response(req, physicalPath, *loc, conn_header);
+                    conn.write_buffer = _serve_static_response(req, physicalPath, *loc, *conn.server_config, conn_header);
                 }
             }
         }
     }
 
     conn.parser.reset();
+    conn.headers_complete = false;
+    conn.read_buffer.clear();
     conn.parser.setMaxBodySize(conn.server_config->client_max_body_size);
     if (conn.keep_alive && !remainder.empty()) {
         conn.parser.feed(remainder);
+        conn.read_buffer = remainder;
+        if (conn.read_buffer.find("\r\n\r\n") != std::string::npos) {
+            conn.headers_complete = true;
+            conn.read_buffer.clear();
+        }
     }
 
     _set_pollout(fd, true);
@@ -461,7 +671,7 @@ std::string Server::_generate_directory_listing(const std::string& physicalPath)
     return html.str();
 }
 
-std::string Server::_serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const std::string& conn_header) const {
+std::string Server::_serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const ServerConfig& server, const std::string& conn_header) const {
     if (req.method == "OPTIONS") {
         HttpResponseBuilder builder;
         builder.setStatus(204).setConnection(conn_header);
@@ -470,9 +680,10 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
     }
 
     if (req.method == "GET" || req.method == "HEAD") {
+        bool is_head = (req.method == "HEAD");
         struct stat st;
         if (stat(physicalPath.c_str(), &st) != 0) {
-            return HttpResponseBuilder::buildErrorPage(404, "");
+            return _build_error_response(404, server, &loc, conn_header);
         }
 
         if (S_ISDIR(st.st_mode)) {
@@ -485,9 +696,14 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                     std::string content = ss.str();
                     HttpResponseBuilder builder;
                     builder.setStatus(200)
-                           .setBody(content)
                            .setContentType(MimeTypes::getType(indexPath))
                            .setConnection(conn_header);
+                    if (is_head) {
+                        builder.setHeader("Content-Length", StringUtils::to_string(content.size()))
+                               .setBody("");
+                    } else {
+                        builder.setBody(content);
+                    }
                     append_cors_headers(builder);
                     return builder.build();
                 }
@@ -498,15 +714,20 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                 if (!listing.empty()) {
                     HttpResponseBuilder builder;
                     builder.setStatus(200)
-                           .setBody(listing)
                            .setContentType("text/html")
                            .setConnection(conn_header);
+                    if (is_head) {
+                        builder.setHeader("Content-Length", StringUtils::to_string(listing.size()))
+                               .setBody("");
+                    } else {
+                        builder.setBody(listing);
+                    }
                     append_cors_headers(builder);
                     return builder.build();
                 }
             }
 
-            return HttpResponseBuilder::buildErrorPage(403, "");
+            return _build_error_response(403, server, &loc, conn_header);
         }
 
         if (S_ISREG(st.st_mode)) {
@@ -517,25 +738,30 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                 std::string content = ss.str();
                 HttpResponseBuilder builder;
                 builder.setStatus(200)
-                       .setBody(content)
                        .setContentType(MimeTypes::getType(physicalPath))
                        .setConnection(conn_header);
+                if (is_head) {
+                    builder.setHeader("Content-Length", StringUtils::to_string(content.size()))
+                           .setBody("");
+                } else {
+                    builder.setBody(content);
+                }
                 append_cors_headers(builder);
                 return builder.build();
             }
         }
 
-        return HttpResponseBuilder::buildErrorPage(404, "");
+        return _build_error_response(404, server, &loc, conn_header);
     }
 
     if (req.method == "POST") {
         if (loc.upload_store.empty()) {
-            return HttpResponseBuilder::buildErrorPage(403, "");
+            return _build_error_response(403, server, &loc, conn_header);
         }
 
         struct stat st;
         if (stat(loc.upload_store.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
-            return HttpResponseBuilder::buildErrorPage(500, "");
+            return _build_error_response(500, server, &loc, conn_header);
         }
 
         std::string filename = "upload_" + StringUtils::to_string(static_cast<int>(time(NULL))) + ".txt";
@@ -543,7 +769,7 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
 
         std::ofstream out(uploadPath.c_str(), std::ios::binary);
         if (!out.is_open()) {
-            return HttpResponseBuilder::buildErrorPage(500, "");
+            return _build_error_response(500, server, &loc, conn_header);
         }
         out.write(req.body.c_str(), static_cast<std::streamsize>(req.body.length()));
         out.close();
@@ -560,15 +786,15 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
     if (req.method == "DELETE") {
         struct stat st;
         if (stat(physicalPath.c_str(), &st) != 0) {
-            return HttpResponseBuilder::buildErrorPage(404, "");
+            return _build_error_response(404, server, &loc, conn_header);
         }
 
         if (!S_ISREG(st.st_mode)) {
-            return HttpResponseBuilder::buildErrorPage(404, "");
+            return _build_error_response(404, server, &loc, conn_header);
         }
 
         if (std::remove(physicalPath.c_str()) != 0) {
-            return HttpResponseBuilder::buildErrorPage(500, "");
+            return _build_error_response(500, server, &loc, conn_header);
         }
 
         HttpResponseBuilder builder;
@@ -577,6 +803,170 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
         return builder.build();
     }
 
-    return HttpResponseBuilder::buildErrorPage(405, "");
+    return _build_error_response(405, server, &loc, conn_header);
 }
 
+std::string Server::_build_error_response(int code, const ServerConfig& server, const LocationConfig* loc, const std::string& conn_header) const {
+    const std::map<int, std::string>& error_pages = loc ? loc->error_pages : server.error_pages;
+    std::map<int, std::string>::const_iterator it = error_pages.find(code);
+
+    if (it != error_pages.end()) {
+        const std::string& configured_path = it->second;
+        if (is_http_url(configured_path)) {
+            HttpResponseBuilder builder;
+            builder.setStatus(302)
+                   .setHeader("Location", configured_path)
+                   .setContentType("text/html")
+                   .setBody(HttpResponseBuilder::buildErrorBody(302, ""))
+                   .setConnection(conn_header);
+            append_cors_headers(builder);
+            return builder.build();
+        }
+
+        std::string file_path;
+        if (resolve_error_page_file(configured_path, loc, server, file_path)) {
+            std::string content;
+            if (read_file_content(file_path, content)) {
+                HttpResponseBuilder builder;
+                builder.setStatus(code)
+                       .setBody(content)
+                       .setContentType(MimeTypes::getType(file_path))
+                       .setConnection(conn_header);
+                append_cors_headers(builder);
+                return builder.build();
+            }
+        }
+    }
+
+    HttpResponseBuilder builder;
+    builder.setStatus(code)
+           .setBody(HttpResponseBuilder::buildErrorBody(code, ""))
+           .setContentType("text/html")
+           .setConnection(conn_header);
+    append_cors_headers(builder);
+    return builder.build();
+}
+
+
+void Server::_handle_cgi_input(int cgi_fd) {
+    int client_fd = _cgi_fd_to_client_fd[cgi_fd];
+    Connection& conn = _connections[client_fd];
+
+    const std::string& body = conn.pending_req.body;
+    size_t to_send = body.size() - conn.cgi_body_bytes_sent;
+
+    if (to_send > 0) {
+        ssize_t n = write(cgi_fd, body.c_str() + conn.cgi_body_bytes_sent, to_send);
+        if (n > 0) {
+            conn.cgi_body_bytes_sent += static_cast<size_t>(n);
+        } else if (n < 0) {
+            Logger::error("Failed to write to CGI stdin");
+            _close_connection(client_fd);
+            return;
+        }
+    }
+
+    if (conn.cgi_body_bytes_sent >= body.size()) {
+        _cgi_fd_to_client_fd.erase(cgi_fd);
+        _remove_from_poll(cgi_fd);
+        close(cgi_fd);
+        conn.cgi_in_fd = -1;
+        conn.cgi_state = CGI_READING_OUT;
+    }
+}
+
+void Server::_handle_cgi_output(int cgi_fd) {
+    int client_fd = _cgi_fd_to_client_fd[cgi_fd];
+    Connection& conn = _connections[client_fd];
+
+    char buf[READ_BUFFER_SIZE];
+    ssize_t n = read(cgi_fd, buf, sizeof(buf));
+
+    if (n > 0) {
+        conn.cgi_response_raw.append(buf, static_cast<size_t>(n));
+    } else if (n == 0) {
+        close(cgi_fd);
+        _cgi_fd_to_client_fd.erase(cgi_fd);
+        conn.cgi_out_fd = -1;
+        _remove_from_poll(cgi_fd);
+        conn.cgi_state = CGI_WAITING_FOR_EXIT;
+    } else {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            Logger::error("Failed to read from CGI stdout");
+            _close_connection(client_fd);
+        }
+    }
+}
+
+void Server::_finalize_cgi_response(int client_fd, int status, pid_t res) {
+    Connection& conn = _connections[client_fd];
+    
+    if (res == 0) return;
+
+    if (res > 0) {
+        conn.cgi_pid = -1;
+        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) || WIFSIGNALED(status)) {
+            std::string msg = "CGI Execution Failed";
+            if (WIFEXITED(status))
+                msg = "CGI script exited with code " + StringUtils::to_string(WEXITSTATUS(status));
+            
+            Logger::warn(msg);
+            conn.write_buffer = build_cgi_error(500, msg, conn.cgi_response_raw);
+            _set_pollout(client_fd, true);
+            _prepare_for_next_request(client_fd);
+            return;
+        }
+    } else {
+        conn.cgi_pid = -1;
+    }
+
+    CgiHandler cgi_handler;
+    CgiParsedOutput cgi_output = cgi_handler.parse_cgi_output(conn.cgi_response_raw, CgiResult::SUCCESS);
+    
+    std::vector< std::pair<std::string, std::string> > response_headers;
+    std::string content_type = "";
+    for (size_t i = 0; i < cgi_output.headers.size(); ++i) {
+        std::string key_lower = StringUtils::to_lower(cgi_output.headers[i].first);
+        if (key_lower == "status" || key_lower == "content-length" || key_lower == "connection") {
+            continue;
+        }
+        if (key_lower == "content-type") {
+            content_type = cgi_output.headers[i].second;
+            continue;
+        }
+        response_headers.push_back(cgi_output.headers[i]);
+    }
+
+    HttpResponseBuilder builder;
+    builder.setStatus(cgi_output.status_code)
+           .setBody(cgi_output.body)
+           .setConnection(conn.keep_alive ? "keep-alive" : "close");
+
+    if (!content_type.empty()) {
+        builder.setContentType(content_type);
+    } else if (cgi_output.status_code != 204) {
+        builder.setContentType("text/html");
+    }
+
+    for (size_t i = 0; i < response_headers.size(); ++i) {
+        builder.setHeader(response_headers[i].first, response_headers[i].second);
+    }
+
+    append_cors_headers(builder);
+    conn.write_buffer = builder.build();
+    _set_pollout(client_fd, true);
+    _prepare_for_next_request(client_fd);
+}
+
+void Server::_check_cgi_exits() {
+    for (std::map<int, Connection>::iterator it = _connections.begin(); it != _connections.end(); ++it) {
+        Connection& conn = it->second;
+        if (conn.cgi_pid != -1 && conn.cgi_state == CGI_WAITING_FOR_EXIT) {
+            int status = 0;
+            pid_t res = waitpid(conn.cgi_pid, &status, WNOHANG);
+            if (res != 0) {
+                _finalize_cgi_response(it->first, status, res);
+            }
+        }
+    }
+}
