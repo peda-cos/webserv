@@ -3,6 +3,7 @@
 #include <StringUtils.hpp>
 
 #include <cctype>
+#include <ctime>
 
 namespace {
     static std::string reason_phrase(int status_code)
@@ -20,10 +21,20 @@ namespace {
             case 413: return "Payload Too Large";
             case 431: return "Request Header Fields Too Large";
             case 500: return "Internal Server Error";
+            case 501: return "Not Implemented";
             case 504: return "Gateway Timeout";
+            case 505: return "HTTP Version Not Supported";
             default: return "Internal Server Error";
         }
     }
+}
+
+static std::string format_http_date() {
+    std::time_t now = std::time(NULL);
+    std::tm* gmt = std::gmtime(&now);
+    char buf[30];
+    std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmt);
+    return std::string(buf);
 }
 
 HttpResponse::HttpResponse() : status_code(200), body(), headers() {}
@@ -64,12 +75,20 @@ std::string HttpResponse::toString() const
     response += CARRIAGE_RETURN_LINE_FEED;
 
     bool has_content_length = false;
+    bool has_date = false;
     for (std::size_t i = 0; i < headers.size(); ++i) {
         std::string lower_key = StringUtils::to_lower(headers[i].first);
         if (lower_key == "content-length") {
             has_content_length = true;
         }
+        if (lower_key == "date") {
+            has_date = true;
+        }
         response += headers[i].first + ": " + headers[i].second + CARRIAGE_RETURN_LINE_FEED;
+    }
+
+    if (!has_date) {
+        response += "Date: " + format_http_date() + CARRIAGE_RETURN_LINE_FEED;
     }
 
     if (!has_content_length) {

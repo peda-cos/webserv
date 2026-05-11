@@ -37,6 +37,11 @@ namespace {
         builder.setHeader("Access-Control-Allow-Headers", "*");
     }
 
+    bool is_unimplemented_method(const std::string& method) {
+        return method != "GET" && method != "HEAD" && method != "POST" &&
+               method != "DELETE" && method != "OPTIONS" && method != "PUT";
+    }
+
     std::string build_cgi_error(int code, const std::string& message, const std::string& extra = "") {
         HttpResponseBuilder builder;
         std::string reason = HttpResponseBuilder::reasonPhraseFor(code);
@@ -585,6 +590,8 @@ bool Server::_queue_parsed_request_response(int fd) {
                    .setConnection(conn_header);
             append_cors_headers(builder);
             conn.write_buffer = builder.build();
+        } else if (is_unimplemented_method(req.method)) {
+            conn.write_buffer = _build_error_response(501, *srv_cfg, loc, conn_header);
         } else if (!RequestRouter::isMethodAllowed(req.method, *loc)) {
             std::string allowed;
             for (size_t i = 0; i < loc->limit_except.size(); ++i) {
@@ -852,6 +859,7 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
 
         HttpResponseBuilder builder;
         builder.setStatus(201)
+               .setHeader("Location", req.path + "/" + filename)
                .setBody("Created")
                .setContentType("text/plain")
                .setConnection(conn_header);
@@ -879,7 +887,31 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
         return builder.build();
     }
 
-    return _build_error_response(405, server, &loc, conn_header);
+    // RFC 7231 §4.1: unrecognized methods → 501
+    if (is_unimplemented_method(req.method)) {
+        return _build_error_response(501, server, &loc, conn_header);
+    }
+
+    // RFC 7231 §6.5.5: 405 MUST include Allow header
+    {
+        std::string allowed;
+        if (!loc.limit_except.empty()) {
+            for (size_t i = 0; i < loc.limit_except.size(); ++i) {
+                if (!allowed.empty()) allowed += ", ";
+                allowed += HttpUtils::method_to_string(loc.limit_except[i]);
+            }
+        } else {
+            allowed = "GET, HEAD, POST, DELETE, OPTIONS";
+        }
+        HttpResponseBuilder builder;
+        builder.setStatus(405)
+               .setHeader("Allow", allowed)
+               .setBody(HttpResponseBuilder::buildErrorBody(405, ""))
+               .setContentType("text/html")
+               .setConnection(conn_header);
+        append_cors_headers(builder);
+        return builder.build();
+    }
 }
 
 std::string Server::_build_error_response(int code, const ServerConfig& server, const LocationConfig* loc, const std::string& conn_header) const {

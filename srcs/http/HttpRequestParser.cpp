@@ -42,12 +42,9 @@ void HttpRequestParser::feed(const std::string& data) {
         return;
     }
 
-    // Only append to _buffer during header parsing phase
     if (_state == REQUEST_LINE || _state == HEADERS) {
         _buffer += data;
     }
-
-    // Process based on current state
     if (_state == REQUEST_LINE || _state == HEADERS) {
         std::size_t endPos = _buffer.find(DOUBLE_CRLF);
         if (endPos != std::string::npos) {
@@ -75,7 +72,6 @@ void HttpRequestParser::feed(const std::string& data) {
             }
         }
     } else if (_state == BODY) {
-        // Accumulate body data
         _bodyBuffer += data;
         if (_bodyBuffer.size() >= _contentLength) {
             _request.setBody(_bodyBuffer.substr(0, _contentLength));
@@ -106,6 +102,23 @@ void HttpRequestParser::setMaxBodySize(std::size_t size) {
 }
 
 void HttpRequestParser::_parseRequestLine() {
+    // RFC 7230 §3.5: ignore leading empty lines before request-line
+    std::size_t startPos = 0;
+    while (startPos + CRLF.size() <= _buffer.size()) {
+        if (_buffer.compare(startPos, CRLF.size(), CRLF) == 0) {
+            startPos += CRLF.size();
+        } else {
+            break;
+        }
+    }
+    if (startPos > 0) {
+        _buffer.erase(0, startPos);
+    }
+    if (_buffer.empty()) {
+        _request.setErrorCode(400);
+        return;
+    }
+
     std::size_t lineEnd = _buffer.find(CRLF);
     if (lineEnd == std::string::npos) {
         _request.setErrorCode(400);
@@ -118,8 +131,6 @@ void HttpRequestParser::_parseRequestLine() {
         _request.setErrorCode(400);
         return;
     }
-
-    // Request line must be exactly METHOD SP URI SP HTTP/version
     if (requestLine.find('\t') != std::string::npos ||
         requestLine[0] == ' ' ||
         requestLine[requestLine.length() - 1] == ' ' ||
@@ -128,42 +139,36 @@ void HttpRequestParser::_parseRequestLine() {
         return;
     }
 
-    // Find first space (after method)
     std::size_t firstSpace = requestLine.find(' ');
     if (firstSpace == std::string::npos) {
         _request.setErrorCode(400);
         return;
     }
 
-    // Find last space (before HTTP version)
     std::size_t lastSpace = requestLine.rfind(' ');
     if (lastSpace == std::string::npos || lastSpace == firstSpace) {
         _request.setErrorCode(400);
         return;
     }
 
-    // Extract method (everything before first space)
     std::string method = requestLine.substr(0, firstSpace);
     if (method.empty()) {
         _request.setErrorCode(400);
         return;
     }
 
-    // Extract URI (everything between first and last space)
     std::string uri = requestLine.substr(firstSpace + 1, lastSpace - firstSpace - 1);
     if (uri.empty()) {
         _request.setErrorCode(400);
         return;
     }
 
-    // Extract HTTP version token (everything after last space)
     std::string versionToken = requestLine.substr(lastSpace + 1);
     if (versionToken.empty()) {
         _request.setErrorCode(400);
         return;
     }
 
-    // Validate HTTP/ prefix and extract version number
     if (versionToken.length() <= HTTP_VERSION_PREFIX.length() ||
         versionToken.substr(0, HTTP_VERSION_PREFIX.length()) != HTTP_VERSION_PREFIX) {
         _request.setErrorCode(400);
@@ -172,15 +177,12 @@ void HttpRequestParser::_parseRequestLine() {
 
     std::string httpVersion = versionToken.substr(HTTP_VERSION_PREFIX.length());
     if (!_isSupportedHttpVersion(httpVersion)) {
-        _request.setErrorCode(400);
+        _request.setErrorCode(505);
         return;
     }
 
-    // All validations passed - set the fields
     _request.setMethod(method);
     _request.setUri(uri);
-
-    // Split URI into path and query string
     std::size_t queryPos = uri.find('?');
     if (queryPos != std::string::npos) {
         _request.setPath(uri.substr(0, queryPos));
@@ -208,27 +210,26 @@ void HttpRequestParser::_parseHeaders() {
     }
     std::size_t headerEnd = endPos + CRLF.size();
 
-    // Parse each header line
     while (pos < headerEnd) {
-        // Find end of this header line
         std::size_t lineEnd = _buffer.find(CRLF, pos);
         if (lineEnd == std::string::npos || lineEnd > endPos) {
             break;
         }
 
-        // Extract the header line
         std::string headerLine = _buffer.substr(pos, lineEnd - pos);
-
-        // Find the colon separator
         std::size_t colonPos = headerLine.find(':');
         if (colonPos == std::string::npos) {
-            // No colon - malformed header
             _request.setErrorCode(400);
             return;
         }
 
         if (colonPos == 0) {
-            // Empty field name
+            _request.setErrorCode(400);
+            return;
+        }
+
+        // RFC 7230 §3.2.4: no whitespace between field-name and colon
+        if (colonPos > 0 && (headerLine[colonPos - 1] == ' ' || headerLine[colonPos - 1] == '\t')) {
             _request.setErrorCode(400);
             return;
         }
@@ -258,11 +259,10 @@ void HttpRequestParser::_parseHeaders() {
             _request.addHeader(fieldName, fieldValue);
         }
 
-        // Move to next header line
         pos = lineEnd + CRLF.size();
     }
 
-    // Validate Host header for HTTP/1.1
+    // RFC 7230 §5.4: Host header required for HTTP/1.1
     if (_request.httpVersion == "1.1") {
         std::map<std::string, std::string>::iterator hostIt = _request.headers.find(HEADER_HOST);
         if (hostIt == _request.headers.end() || hostIt->second.empty() || hostIt->second.find(',') != std::string::npos) {
@@ -275,6 +275,11 @@ void HttpRequestParser::_parseHeaders() {
     if (transferEncodingIt != _request.headers.end() && !_isChunkedTransferEncoding(transferEncodingIt->second)) {
         _request.setErrorCode(400);
         return;
+    }
+
+    // RFC 7230 §3.3.3: Transfer-Encoding overrides Content-Length; remove it to prevent smuggling
+    if (transferEncodingIt != _request.headers.end()) {
+        _request.headers.erase(HEADER_CONTENT_LENGTH);
     }
 
     std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find(HEADER_CONTENT_LENGTH);
@@ -302,7 +307,6 @@ void HttpRequestParser::_initiateBodyReading(const std::string& afterHeaders) {
         return;
     }
 
-    // Check for content-length header
     std::map<std::string, std::string>::iterator contentLengthIt = _request.headers.find(HEADER_CONTENT_LENGTH);
     if (contentLengthIt == _request.headers.end()) {
         // No body expected - any afterHeaders is the remainder (pipelined request)
@@ -324,10 +328,8 @@ void HttpRequestParser::_initiateBodyReading(const std::string& afterHeaders) {
         return;
     }
 
-    // Use afterHeaders as initial body data
     _bodyBuffer = afterHeaders;
 
-    // Check if we have enough body data already
     if (_bodyBuffer.size() >= _contentLength) {
         _request.setBody(_bodyBuffer.substr(0, _contentLength));
         // Capture remainder (excess bytes beyond Content-Length)
@@ -371,7 +373,6 @@ void HttpRequestParser::_parseContentLength() {
 
     const std::string& value = it->second;
 
-    // Validate: must be digits only
     if (value.empty()) {
         _request.setErrorCode(400);
         _state = ERROR;
@@ -386,7 +387,6 @@ void HttpRequestParser::_parseContentLength() {
         }
     }
 
-    // Parse the value
     _contentLength = 0;
     for (std::size_t i = 0; i < value.length(); ++i) {
         int digit = value[i] - '0';
@@ -399,7 +399,6 @@ void HttpRequestParser::_parseContentLength() {
         _contentLength = _contentLength * 10 + digit;
     }
 
-    // Check against max body size
     if (_maxBodySize > 0 && _contentLength > _maxBodySize) {
         _request.setErrorCode(413);
         _state = ERROR;

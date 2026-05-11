@@ -2,6 +2,7 @@
 #include <CgiPipeManager.hpp>
 #include <CgiException.hpp>
 #include <Logger.hpp>
+#include <HttpRequest.hpp>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -43,7 +44,18 @@ CgiProcessInfo CgiExecutor::start_cgi(const HttpRequest& request, const Location
     std::string request_script_path = request_path.substr(0, slash_pos);
     std::string cgi_script_path = CgiUtils::absolute_path(CgiUtils::resolve_script_path(request_script_path, location_config));
 
+    // RFC 3875 §4.1.14: SERVER_NAME = host from request, not config
     std::string server_name = server_config.host;
+    std::map<std::string, std::string>::const_iterator host_it = request.headers.find("host");
+    if (host_it != request.headers.end() && !host_it->second.empty()) {
+        std::string host_header = host_it->second;
+        std::size_t colon_pos = host_header.rfind(':');
+        if (colon_pos != std::string::npos) {
+            server_name = host_header.substr(0, colon_pos);
+        } else {
+            server_name = host_header;
+        }
+    }
     std::string server_port = server_config.port;
 
     std::string remote_addr;

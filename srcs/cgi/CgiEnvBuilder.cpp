@@ -1,26 +1,27 @@
 #include <CgiEnvBuilder.hpp>
 #include <TypeDefs.hpp>
 #include <CgiUtils.hpp>
+#include <StringUtils.hpp>
 #include <sstream>
 
 UriPathParts CgiEnvBuilder::extract_path_parts(const HttpRequest& request, const LocationConfig& location) {
     UriPathParts parts;
     const std::string& request_path = request.path.empty() ? request.uri : request.path;
-    
+
     std::size_t dotPos = request_path.rfind('.');
     if (dotPos == std::string::npos) {
         parts.script_name = request_path;
         parts.path_info = "";
         return parts;
     }
-    
+
     std::size_t slash_pos = request_path.find('/', dotPos);
     if (slash_pos == std::string::npos) {
         slash_pos = request_path.length();
     }
-    
+
     std::string extension = request_path.substr(dotPos, slash_pos - dotPos);
-    
+
     if (location.cgi_handlers.find(extension) != location.cgi_handlers.end()) {
         parts.script_name = request_path.substr(0, slash_pos);
         parts.path_info = request_path.substr(slash_pos);
@@ -28,7 +29,7 @@ UriPathParts CgiEnvBuilder::extract_path_parts(const HttpRequest& request, const
         parts.script_name = request_path;
         parts.path_info = "";
     }
-    
+
     return parts;
 }
 
@@ -41,6 +42,9 @@ void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const Loc
     env_map["SERVER_SOFTWARE"] = "Webserv/1.0";
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
 
+    // RFC 3875 §4.1.1: AUTH_TYPE — empty if no authentication
+    env_map["AUTH_TYPE"] = "";
+
     env_map["REQUEST_METHOD"] = request.method;
     env_map["REQUEST_URI"] = request.uri;
     env_map["CONTENT_LENGTH"] = "0";
@@ -49,6 +53,12 @@ void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const Loc
     UriPathParts path_parts = extract_path_parts(request, location);
     env_map["SCRIPT_NAME"] = path_parts.script_name;
     env_map["PATH_INFO"] = path_parts.path_info;
+
+    // RFC 3875 §4.1.6: PATH_TRANSLATED derived from PATH_INFO
+    if (!path_parts.path_info.empty()) {
+        env_map["PATH_TRANSLATED"] = CgiUtils::absolute_path(
+            CgiUtils::resolve_script_path(path_parts.path_info, location));
+    }
 
     if (!script_filename.empty()) {
         env_map["SCRIPT_FILENAME"] = script_filename;
@@ -61,6 +71,8 @@ void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const Loc
     }
     if (!remote_addr.empty()) {
         env_map["REMOTE_ADDR"] = remote_addr;
+        // RFC 3875 §4.1.9: REMOTE_HOST — fallback to REMOTE_ADDR
+        env_map["REMOTE_HOST"] = remote_addr;
     }
 }
 
@@ -84,7 +96,20 @@ void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
 
 void CgiEnvBuilder::build_headers_envs(const HttpRequest& request) {
     const StringMap &headers = request.headers;
+    // RFC 3875 §4.1.18: exclude headers already available as meta-variables
+    // Content-Length, Content-Type, Authorization, Connection
+    static const std::string excluded[] = {
+        "content-length", "content-type", "authorization", "connection"
+    };
+    static const size_t excluded_count = sizeof(excluded) / sizeof(excluded[0]);
+
     for (StringMapIterator it = headers.begin(); it != headers.end(); ++it) {
+        std::string lower = StringUtils::to_lower(it->first);
+        bool skip = false;
+        for (size_t i = 0; i < excluded_count; ++i) {
+            if (lower == excluded[i]) { skip = true; break; }
+        }
+        if (skip) continue;
         std::string header_name = "HTTP_" + CgiUtils::env_normalize(it->first);
         env_map[header_name] = it->second;
     }
