@@ -97,7 +97,6 @@ void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
 void CgiEnvBuilder::build_headers_envs(const HttpRequest& request) {
     const StringMap &headers = request.headers;
     // RFC 3875 §4.1.18: exclude headers already available as meta-variables
-    // Content-Length, Content-Type, Authorization, Connection
     static const std::string excluded[] = {
         "content-length", "content-type", "authorization", "connection"
     };

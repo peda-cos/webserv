@@ -106,18 +106,14 @@ void ChunkedDecoder::_processBuffer() {
 }
 
 void ChunkedDecoder::_processReadingSize() {
-    // Look for CRLF ending the size line
     std::size_t crlfPos = _buffer.find("\r\n");
 
     if (crlfPos == std::string::npos) {
-        // No complete line yet - wait for more data
         return;
     }
 
-    // Extract the size line
     std::string sizeLine = _buffer.substr(0, crlfPos);
 
-    // Remove the size line from buffer
     _buffer.erase(0, crlfPos + 2);
 
     // Parse hex size (ignore extensions after ;)
@@ -188,18 +184,15 @@ void ChunkedDecoder::_appendToBody(const std::string& data) {
 }
 
 void ChunkedDecoder::_processReadingTrailerCrlf() {
-    // Need at least 2 bytes for CRLF
     if (_buffer.size() < 2) {
         return;
     }
 
-    // Check for CRLF
     if (_buffer[0] != '\r' || _buffer[1] != '\n') {
         _error = true;
         throw ChunkedDecodeException("Expected CRLF after chunk data");
     }
 
-    // Consume the CRLF
     _buffer.erase(0, 2);
 
     _state = READING_SIZE;

@@ -4,9 +4,6 @@
 #include <string>
 #include <stdexcept>
 
-/**
- * Exception thrown when chunked decoding encounters malformed data.
- */
 class ChunkedDecodeException : public std::runtime_error {
 public:
     explicit ChunkedDecodeException(const std::string& msg)
@@ -19,19 +16,8 @@ public:
         : ChunkedDecodeException(msg) {}
 };
 
-/**
- * Incremental decoder for HTTP chunked transfer-encoding.
- *
- * This class parses chunked-encoded data received in arbitrary fragments,
- * extracting hex chunk sizes, reading chunk data, and concatenating it
- * into a complete decoded body.
- *
- * State machine:
- *   READING_SIZE       - Accumulating hex digits until CRLF
- *   READING_DATA       - Consuming exactly N bytes of chunk data
- *   READING_TRAILER_CRLF - Consuming CRLF after each chunk
- *   DONE               - Zero-length terminator received
- */
+// State machine: READING_SIZE → READING_DATA → READING_TRAILER_CRLF → DONE
+// Zero-length terminator → DONE
 class ChunkedDecoder {
 public:
     enum DecoderState {
@@ -42,14 +28,8 @@ public:
         DONE
     };
 
-    /**
-     * Constructor - initializes decoder in READING_SIZE state.
-     */
     ChunkedDecoder();
 
-    /**
-     * Destructor.
-     */
     ~ChunkedDecoder();
 
     /**
@@ -69,18 +49,8 @@ public:
      */
     bool isComplete() const;
 
-    /**
-     * Get the decoded body accumulated so far.
-     *
-     * @return The decoded body content
-     */
     std::string getBody() const;
 
-    /**
-     * Check if an error has occurred.
-     *
-     * @return true if the decoder is in an error state
-     */
     bool hasError() const;
 
     /**
@@ -92,12 +62,12 @@ public:
 
 private:
     DecoderState _state;
-    std::string _buffer;           // Buffer for incomplete data
-    std::string _body;             // Accumulated decoded body
-    std::size_t _currentChunkSize; // Size of chunk being read
-    std::size_t _bytesRead;        // Bytes read in current chunk
-    std::size_t _maxBodySize;      // Maximum decoded body size (0 = unlimited)
-    bool _error;                   // Error state flag
+    std::string _buffer;
+    std::string _body;
+    std::size_t _currentChunkSize;
+    std::size_t _bytesRead;
+    std::size_t _maxBodySize;      // 0 = unlimited
+    bool _error;
 
     /**
      * Parse a hex string to size_t.
@@ -108,9 +78,6 @@ private:
      */
     std::size_t _parseHexSize(const std::string& hex) const;
 
-    /**
-     * Process accumulated data in the buffer based on current state.
-     */
     void _processBuffer();
 
     /**
@@ -118,14 +85,8 @@ private:
      */
     void _processReadingSize();
 
-    /**
-     * Handle READING_DATA state - accumulate chunk data.
-     */
     void _processReadingData();
 
-    /**
-     * Handle READING_TRAILER_CRLF state - consume CRLF after chunk data.
-     */
     void _processReadingTrailerCrlf();
     void _processReadingTrailers();
     void _appendToBody(const std::string& data);

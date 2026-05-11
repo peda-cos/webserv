@@ -18,7 +18,6 @@ static std::map<std::string, std::string> envp_to_map(char** envp) {
 	return env;
 }
 
-/* Helper to create minimal LocationConfig for testing */
 LocationConfig create_test_location() {
 	LocationConfig loc;
 	loc.cgi_handlers[".py"] = "/usr/bin/python3";
@@ -27,9 +26,6 @@ LocationConfig create_test_location() {
 	return loc;
 }
 
-/* ------------------------------------------------------------------------ */
-/* 1. A GET request must set REQUEST_METHOD to "GET".                        */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, RequestMethodGet)
 {
 	HttpRequest req;
@@ -43,9 +39,6 @@ TEST(CgiEnv, RequestMethodGet)
 	ASSERT_EQ(std::string("GET"), env["REQUEST_METHOD"]);
 }
 
-/* ------------------------------------------------------------------------ */
-/* 2. A POST request must set REQUEST_METHOD to "POST".                     */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, RequestMethodPost)
 {
 	HttpRequest req;
@@ -61,9 +54,6 @@ TEST(CgiEnv, RequestMethodPost)
 	ASSERT_EQ(std::string("POST"), env["REQUEST_METHOD"]);
 }
 
-/* ------------------------------------------------------------------------ */
-/* 3. Content-Type header must be forwarded to CONTENT_TYPE env var.         */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, ContentTypeFromHeaders)
 {
 	HttpRequest req;
@@ -79,9 +69,6 @@ TEST(CgiEnv, ContentTypeFromHeaders)
 	ASSERT_EQ(std::string("application/json"), env["CONTENT_TYPE"]);
 }
 
-/* ------------------------------------------------------------------------ */
-/* 4. Content-Length header must be forwarded to CONTENT_LENGTH env var.     */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, ContentLengthFromHeaders)
 {
 	HttpRequest req;
@@ -98,9 +85,6 @@ TEST(CgiEnv, ContentLengthFromHeaders)
 	ASSERT_EQ(std::string("44"), env["CONTENT_LENGTH"]);
 }
 
-/* ------------------------------------------------------------------------ */
-/* 5. PATH_INFO must be extracted from the URI after the script name.        */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, PathInfoFromUri)
 {
 	HttpRequest req;
@@ -111,15 +95,10 @@ TEST(CgiEnv, PathInfoFromUri)
 	LocationConfig loc = create_test_location();
 	CgiEnvBuilder builder(req, loc);
 	std::map<std::string, std::string> env = envp_to_map(builder.getEnvp());
-	
-	// PATH_INFO is extracted from URI after CGI script extension
-	// uri_path="/cgi-bin/script.py/extra/path" with .py handler → PATH_INFO="/extra/path"
+
 	ASSERT_EQ(std::string("/extra/path"), env["PATH_INFO"]);
 }
 
-/* ------------------------------------------------------------------------ */
-/* 6. QUERY_STRING must be extracted from the URI after '?'.                 */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, QueryStringFromUri)
 {
 	HttpRequest req;
@@ -167,9 +146,6 @@ TEST(CgiEnv, ScriptNameUsesParsedPath)
 	ASSERT_EQ(std::string("HTTP/1.1"), env["SERVER_PROTOCOL"]);
 }
 
-/* ------------------------------------------------------------------------ */
-/* 8. Required CGI environment variables must be present.                   */
-/* ------------------------------------------------------------------------ */
 TEST(CgiEnv, EssentialVarsPresent)
 {
 	HttpRequest req;

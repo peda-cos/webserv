@@ -390,7 +390,6 @@ void HttpRequestParser::_parseContentLength() {
     _contentLength = 0;
     for (std::size_t i = 0; i < value.length(); ++i) {
         int digit = value[i] - '0';
-        // Check for overflow
         if (_contentLength > (static_cast<std::size_t>(-1) - digit) / 10) {
             _request.setErrorCode(400);
             _state = ERROR;
