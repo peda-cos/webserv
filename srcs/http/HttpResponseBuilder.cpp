@@ -60,6 +60,7 @@ std::string HttpResponseBuilder::build() const
     response.setStatusCode(_statusCode);
     response.setBody(_body);
 
+    response.addHeader("Server", "webserv");
     response.addHeader("Content-Type", _contentType);
 
     for (std::size_t i = 0; i < _headers.size(); ++i) {

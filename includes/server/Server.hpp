@@ -22,7 +22,7 @@ class Server {
     private:
         const Config& _config;
         std::vector<int> _listening_fds;
-        std::map<int, const ServerConfig*> _fd_to_server_config;
+        std::map<int, std::vector<const ServerConfig*> > _fd_to_server_configs;
         std::map<int, Connection> _connections;
         std::map<int, int> _cgi_fd_to_client_fd;
 
@@ -47,8 +47,9 @@ class Server {
         void _check_timeouts();
         void _check_cgi_exits();
         bool _queue_parsed_request_response(int fd);
+        const ServerConfig* _match_server_config(const std::vector<const ServerConfig*>& configs, const HttpRequest& req) const;
         std::string _serve_static_response(const HttpRequest& req, const std::string& physicalPath, const LocationConfig& loc, const ServerConfig& server, const std::string& conn_header) const;
-        std::string _generate_directory_listing(const std::string& physicalPath) const;
+        std::string _generate_directory_listing(const std::string& physicalPath, const std::string& uriPath) const;
         std::string _build_error_response(int code, const ServerConfig& server, const LocationConfig* loc, const std::string& conn_header) const;
 
 

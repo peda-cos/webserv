@@ -74,15 +74,6 @@ Config ConfigParser::parse() {
         advance();
     }
 
-    for (size_t i = 0; i < config.servers.size(); ++i) {
-        for (size_t j = i + 1; j < config.servers.size(); ++j) {
-            if (config.servers[i].host == config.servers[j].host &&
-                config.servers[i].port == config.servers[j].port) {
-                std::string msg = "Duplicate listen: " + config.servers[i].host + ":" + config.servers[i].port;
-                throw ConfigParse::SyntaxException(msg, ConfigParse::CONFIG_PARSER, current_token.source_position);
-            }
-        }
-    }
 
     return config;
 }

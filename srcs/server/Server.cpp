@@ -129,20 +129,31 @@ Server::~Server() {
 }
 
 void Server::_setup_listening_sockets() {
+    std::map<std::string, int> hostport_to_fd;
+
     for (size_t i = 0; i < _config.servers.size(); ++i) {
         const ServerConfig& srv = _config.servers[i];
-        int fd = _create_listening_socket(srv);
-        if (fd < 0) {
-            continue;
-        }
-        _listening_fds.push_back(fd);
-        _fd_to_server_config[fd] = &srv;
-        _register_fd(fd, POLLIN);
+        std::string key = srv.host + ":" + srv.port;
 
-        std::stringstream ss;
-        ss << "Listening on " << (srv.host.empty() ? "0.0.0.0" : srv.host)
-           << ":" << srv.port;
-        Logger::info(ss.str());
+        std::map<std::string, int>::iterator it = hostport_to_fd.find(key);
+        int fd;
+        if (it != hostport_to_fd.end()) {
+            fd = it->second;
+        } else {
+            fd = _create_listening_socket(srv);
+            if (fd < 0) {
+                continue;
+            }
+            _listening_fds.push_back(fd);
+            _register_fd(fd, POLLIN);
+            hostport_to_fd[key] = fd;
+
+            std::stringstream ss;
+            ss << "Listening on " << (srv.host.empty() ? "0.0.0.0" : srv.host)
+               << ":" << srv.port;
+            Logger::info(ss.str());
+        }
+        _fd_to_server_configs[fd].push_back(&srv);
     }
 }
 
@@ -294,10 +305,12 @@ void Server::_accept_new_connection(int listening_fd) {
         return;
     }
 
-    const ServerConfig* srv_cfg = _fd_to_server_config[listening_fd];
-    _connections[client_fd] = Connection(client_fd, srv_cfg);
+    const std::vector<const ServerConfig*>& srv_cfgs = _fd_to_server_configs[listening_fd];
+    _connections[client_fd] = Connection(client_fd, srv_cfgs);
 
-    _connections[client_fd].parser.setMaxBodySize(srv_cfg->client_max_body_size);
+    if (!srv_cfgs.empty()) {
+        _connections[client_fd].parser.setMaxBodySize(srv_cfgs[0]->client_max_body_size);
+    }
 
     _register_fd(client_fd, POLLIN);
 
@@ -486,6 +499,32 @@ void Server::_check_timeouts() {
     }
 }
 
+const ServerConfig* Server::_match_server_config(const std::vector<const ServerConfig*>& configs, const HttpRequest& req) const {
+    if (configs.empty()) return NULL;
+
+    std::string host;
+    std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
+    if (it != req.headers.end()) {
+        host = it->second;
+        size_t colon = host.rfind(':');
+        if (colon != std::string::npos) {
+            host = host.substr(0, colon);
+        }
+    }
+
+    if (!host.empty()) {
+        for (size_t i = 0; i < configs.size(); ++i) {
+            for (size_t j = 0; j < configs[i]->server_names.size(); ++j) {
+                if (configs[i]->server_names[j] == host) {
+                    return configs[i];
+                }
+            }
+        }
+    }
+
+    return configs[0];
+}
+
 bool Server::_queue_parsed_request_response(int fd) {
     Connection& conn = _connections[fd];
     HttpRequest req = conn.parser.getRequest();
@@ -521,20 +560,22 @@ bool Server::_queue_parsed_request_response(int fd) {
     conn.keep_alive = !shouldClose;
 
     const std::string conn_header = conn.keep_alive ? "keep-alive" : "close";
+    const ServerConfig* srv_cfg = _match_server_config(conn.server_configs, req);
+
     if (req.errorCode != 0) {
         conn.keep_alive = false;
-        if (conn.server_config) {
-            conn.write_buffer = _build_error_response(req.errorCode, *conn.server_config, NULL, "close");
+        if (srv_cfg) {
+            conn.write_buffer = _build_error_response(req.errorCode, *srv_cfg, NULL, "close");
         } else {
             conn.write_buffer = HttpResponseBuilder::buildErrorPage(req.errorCode, "");
         }
-    } else if (!conn.server_config) {
+    } else if (!srv_cfg) {
         Logger::error("No server config for connection");
         conn.write_buffer = HttpResponseBuilder::buildErrorPage(500, "");
     } else {
-        const LocationConfig* loc = RequestRouter::matchLocation(*conn.server_config, req.path);
+        const LocationConfig* loc = RequestRouter::matchLocation(*srv_cfg, req.path);
         if (!loc) {
-            conn.write_buffer = _build_error_response(404, *conn.server_config, NULL, conn_header);
+            conn.write_buffer = _build_error_response(404, *srv_cfg, NULL, conn_header);
         } else if (loc->return_code != 0) {
             HttpResponseBuilder builder;
             builder.setStatus(loc->return_code)
@@ -565,11 +606,11 @@ bool Server::_queue_parsed_request_response(int fd) {
                 size_t slash_pos = 0;
                 if (CgiUtils::extract_extension(target, ext, slash_pos) &&
                     loc->cgi_handlers.find(ext) == loc->cgi_handlers.end()) {
-                    conn.write_buffer = _build_error_response(404, *conn.server_config, loc, conn_header);
+                    conn.write_buffer = _build_error_response(404, *srv_cfg, loc, conn_header);
                     conn.parser.reset();
                     conn.headers_complete = false;
                     conn.read_buffer.clear();
-                    conn.parser.setMaxBodySize(conn.server_config->client_max_body_size);
+                    conn.parser.setMaxBodySize(srv_cfg->client_max_body_size);
                     if (conn.keep_alive && !remainder.empty()) {
                         conn.parser.feed(remainder);
                         conn.read_buffer = remainder;
@@ -582,9 +623,9 @@ bool Server::_queue_parsed_request_response(int fd) {
                     return true;
                 }
             }
-            std::string physicalPath = RequestRouter::resolvePhysicalPath(*loc, req.path, *conn.server_config);
+            std::string physicalPath = RequestRouter::resolvePhysicalPath(*loc, req.path, *srv_cfg);
             if (RequestRouter::isPathTraversal(physicalPath)) {
-                conn.write_buffer = _build_error_response(403, *conn.server_config, loc, conn_header);
+                conn.write_buffer = _build_error_response(403, *srv_cfg, loc, conn_header);
             } else {
                 RequestRouter::TargetType target = RequestRouter::classifyRequest(physicalPath, *loc);
                 if (target == RequestRouter::TARGET_CGI) {
@@ -594,8 +635,8 @@ bool Server::_queue_parsed_request_response(int fd) {
                     }
                     CgiHandler cgi_handler;
                     CgiProcessInfo cgi_info;
-                    int status_code = cgi_handler.start_cgi(req, *conn.server_config, cgi_info, fd);
-                    
+                    int status_code = cgi_handler.start_cgi(req, *srv_cfg, cgi_info, fd);
+
                     if (status_code != 0) {
                         conn.write_buffer = build_cgi_error(status_code, "");
                     } else {
@@ -618,15 +659,15 @@ bool Server::_queue_parsed_request_response(int fd) {
                             }
                             conn.cgi_state = CGI_READING_OUT;
                         }
-                        
+
                         _register_fd(conn.cgi_out_fd, POLLIN);
                         _cgi_fd_to_client_fd[conn.cgi_out_fd] = fd;
-                        
+
                         _set_pollout(fd, false);
-                        return true; 
+                        return true;
                     }
                 } else {
-                    conn.write_buffer = _serve_static_response(req, physicalPath, *loc, *conn.server_config, conn_header);
+                    conn.write_buffer = _serve_static_response(req, physicalPath, *loc, *srv_cfg, conn_header);
                 }
             }
         }
@@ -635,7 +676,9 @@ bool Server::_queue_parsed_request_response(int fd) {
     conn.parser.reset();
     conn.headers_complete = false;
     conn.read_buffer.clear();
-    conn.parser.setMaxBodySize(conn.server_config->client_max_body_size);
+    if (srv_cfg) {
+        conn.parser.setMaxBodySize(srv_cfg->client_max_body_size);
+    }
     if (conn.keep_alive && !remainder.empty()) {
         conn.parser.feed(remainder);
         conn.read_buffer = remainder;
@@ -649,15 +692,16 @@ bool Server::_queue_parsed_request_response(int fd) {
     return true;
 }
 
-std::string Server::_generate_directory_listing(const std::string& physicalPath) const {
+std::string Server::_generate_directory_listing(const std::string& physicalPath, const std::string& uriPath) const {
     DIR* dir = opendir(physicalPath.c_str());
     if (!dir) {
         return "";
     }
 
+    std::string displayPath = uriPath.empty() ? "/" : uriPath;
     std::ostringstream html;
-    html << "<html><head><title>Index of " << physicalPath << "</title></head><body>\n";
-    html << "<h1>Index of " << physicalPath << "</h1><hr><pre>\n";
+    html << "<html><head><title>Index of " << displayPath << "</title></head><body>\n";
+    html << "<h1>Index of " << displayPath << "</h1><hr><pre>\n";
 
     struct dirent* entry;
     while ((entry = readdir(dir)) != NULL) {
@@ -672,7 +716,7 @@ std::string Server::_generate_directory_listing(const std::string& physicalPath)
             name += "/";
         }
 
-        html << "<a href=\"" << name << "\">" << name << "</a>\n";
+        html << "<a href=\"" << displayPath << name << "\">" << name << "</a>\n";
     }
 
     closedir(dir);
@@ -696,6 +740,16 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
         }
 
         if (S_ISDIR(st.st_mode)) {
+            if (req.path[req.path.size() - 1] != '/') {
+                HttpResponseBuilder builder;
+                builder.setStatus(301)
+                       .setHeader("Location", req.path + "/")
+                       .setContentType("text/html")
+                       .setBody(HttpResponseBuilder::buildErrorBody(301, ""))
+                       .setConnection(conn_header);
+                append_cors_headers(builder);
+                return builder.build();
+            }
             if (!loc.index.empty()) {
                 std::string indexPath = CgiUtils::join_paths(physicalPath, loc.index);
                 std::ifstream indexFile(indexPath.c_str(), std::ios::binary);
@@ -719,7 +773,7 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
             }
 
             if (loc.autoindex == ON) {
-                std::string listing = _generate_directory_listing(physicalPath);
+                std::string listing = _generate_directory_listing(physicalPath, req.path);
                 if (!listing.empty()) {
                     HttpResponseBuilder builder;
                     builder.setStatus(200)
@@ -765,7 +819,20 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
 
     if (req.method == "POST") {
         if (loc.upload_store.empty()) {
-            return _build_error_response(403, server, &loc, conn_header);
+            std::string allowed;
+            for (size_t i = 0; i < loc.limit_except.size(); ++i) {
+                if (loc.limit_except[i] == POST) continue;
+                if (!allowed.empty()) allowed += ", ";
+                allowed += HttpUtils::method_to_string(loc.limit_except[i]);
+            }
+            HttpResponseBuilder builder;
+            builder.setStatus(405)
+                   .setHeader("Allow", allowed)
+                   .setBody(HttpResponseBuilder::buildErrorBody(405, ""))
+                   .setContentType("text/html")
+                   .setConnection(conn_header);
+            append_cors_headers(builder);
+            return builder.build();
         }
 
         struct stat st;
