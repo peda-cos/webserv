@@ -10,6 +10,8 @@
 #include <CgiEnvBuilder.hpp>
 #include <CgiUtils.hpp>
 #include <cstdlib>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 namespace {
     static std::string script_directory(const std::string& script_path) {
@@ -24,7 +26,8 @@ namespace {
     }
 }
 
-CgiProcessInfo CgiExecutor::start_cgi(const HttpRequest& request, const LocationConfig& location_config) const
+CgiProcessInfo CgiExecutor::start_cgi(const HttpRequest& request, const LocationConfig& location_config,
+                                       const ServerConfig& server_config, int client_fd) const
 {
     CgiPipeManager pipe_manager;
     const std::string& request_path = request.path.empty() ? request.uri : request.path;
@@ -40,6 +43,20 @@ CgiProcessInfo CgiExecutor::start_cgi(const HttpRequest& request, const Location
     std::string request_script_path = request_path.substr(0, slash_pos);
     std::string cgi_script_path = CgiUtils::absolute_path(CgiUtils::resolve_script_path(request_script_path, location_config));
 
+    std::string server_name = server_config.host;
+    std::string server_port = server_config.port;
+
+    std::string remote_addr;
+    struct sockaddr_in addr;
+    socklen_t addr_len = sizeof(addr);
+    if (getpeername(client_fd, reinterpret_cast<struct sockaddr*>(&addr), &addr_len) == 0) {
+        char ip[INET_ADDRSTRLEN];
+        const char* result = inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+        if (result) {
+            remote_addr = std::string(ip);
+        }
+    }
+
     pid_t pid = fork();
     if (pid == -1) {
         throw CgiException("Failed to fork process: " + std::string(strerror(errno)));
@@ -54,7 +71,7 @@ CgiProcessInfo CgiExecutor::start_cgi(const HttpRequest& request, const Location
         args[0] = cgi_interpreter.c_str();
         args[1] = cgi_script_path.c_str();
         args[2] = NULL;
-        CgiEnvBuilder env_builder(request, location_config);
+        CgiEnvBuilder env_builder(request, location_config, cgi_script_path, server_name, server_port, remote_addr);
         execve(args[0], (char* const*)args, env_builder.getEnvp());
         exit(127);
     }

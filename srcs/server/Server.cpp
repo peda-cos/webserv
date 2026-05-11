@@ -7,6 +7,7 @@
 #include <MimeTypes.hpp>
 #include <RequestRouter.hpp>
 #include <CgiUtils.hpp>
+#include <HttpUtils.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,7 +15,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-#include <errno.h>
 #include <sys/stat.h>
 #include <dirent.h>
 
@@ -314,9 +314,6 @@ void Server::_read_from_client(int fd) {
         return;
     }
     if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return;
-        }
         _close_connection(fd);
         return;
     }
@@ -361,12 +358,12 @@ void Server::_write_to_client(int fd) {
 
     ssize_t n = send(fd, conn.write_buffer.c_str(), conn.write_buffer.size(), 0);
 
-    if (n > 0) {
-        conn.write_buffer.erase(0, static_cast<size_t>(n));
-    } else if (n < 0) {
+    if (n <= 0) {
         _close_connection(fd);
         return;
     }
+
+    conn.write_buffer.erase(0, static_cast<size_t>(n));
 
     if (conn.write_buffer.empty()) {
         _set_pollout(fd, false);
@@ -548,7 +545,19 @@ bool Server::_queue_parsed_request_response(int fd) {
             append_cors_headers(builder);
             conn.write_buffer = builder.build();
         } else if (!RequestRouter::isMethodAllowed(req.method, *loc)) {
-            conn.write_buffer = _build_error_response(405, *conn.server_config, loc, conn_header);
+            std::string allowed;
+            for (size_t i = 0; i < loc->limit_except.size(); ++i) {
+                if (!allowed.empty()) allowed += ", ";
+                allowed += HttpUtils::method_to_string(loc->limit_except[i]);
+            }
+            HttpResponseBuilder builder;
+            builder.setStatus(405)
+                   .setHeader("Allow", allowed)
+                   .setBody(HttpResponseBuilder::buildErrorBody(405, ""))
+                   .setContentType("text/html")
+                   .setConnection(conn_header);
+            append_cors_headers(builder);
+            conn.write_buffer = builder.build();
         } else {
             if (!loc->cgi_handlers.empty()) {
                 std::string target = req.path.empty() ? req.uri : req.path;
@@ -585,7 +594,7 @@ bool Server::_queue_parsed_request_response(int fd) {
                     }
                     CgiHandler cgi_handler;
                     CgiProcessInfo cgi_info;
-                    int status_code = cgi_handler.start_cgi(req, *conn.server_config, cgi_info);
+                    int status_code = cgi_handler.start_cgi(req, *conn.server_config, cgi_info, fd);
                     
                     if (status_code != 0) {
                         conn.write_buffer = build_cgi_error(status_code, "");
@@ -857,13 +866,12 @@ void Server::_handle_cgi_input(int cgi_fd) {
 
     if (to_send > 0) {
         ssize_t n = write(cgi_fd, body.c_str() + conn.cgi_body_bytes_sent, to_send);
-        if (n > 0) {
-            conn.cgi_body_bytes_sent += static_cast<size_t>(n);
-        } else if (n < 0) {
+        if (n <= 0) {
             Logger::error("Failed to write to CGI stdin");
             _close_connection(client_fd);
             return;
         }
+        conn.cgi_body_bytes_sent += static_cast<size_t>(n);
     }
 
     if (conn.cgi_body_bytes_sent >= body.size()) {
@@ -891,10 +899,8 @@ void Server::_handle_cgi_output(int cgi_fd) {
         _remove_from_poll(cgi_fd);
         conn.cgi_state = CGI_WAITING_FOR_EXIT;
     } else {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            Logger::error("Failed to read from CGI stdout");
-            _close_connection(client_fd);
-        }
+        Logger::error("Failed to read from CGI stdout");
+        _close_connection(client_fd);
     }
 }
 

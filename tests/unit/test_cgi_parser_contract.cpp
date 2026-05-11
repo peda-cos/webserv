@@ -4,6 +4,7 @@
 #include <CgiException.hpp>
 #include <HttpRequest.hpp>
 #include <LocationConfig.hpp>
+#include <ServerConfig.hpp>
 
 #include <fstream>
 #include <string>
@@ -63,7 +64,8 @@ TEST(CgiParserContract, PathResolutionIgnoresQueryString)
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
 	CgiExecutor executor;
-	CgiProcessInfo info = executor.start_cgi(req, config);
+		ServerConfig srv;
+	CgiProcessInfo info = executor.start_cgi(req, config, srv, -1);
 	
 	std::string output;
 	char buffer[4096];
@@ -119,7 +121,8 @@ TEST(CgiParserContract, MissingExtensionThrowsCgiException)
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
 	CgiExecutor executor;
-	ASSERT_THROWS(executor.start_cgi(req, config), CgiException);
+		ServerConfig srv;
+	ASSERT_THROWS(executor.start_cgi(req, config, srv, -1), CgiException);
 }
 
 MINITEST_MAIN()

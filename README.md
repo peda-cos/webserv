@@ -11,7 +11,7 @@
 - Configurable error pages and directory listings
 - NGINX-inspired configuration syntax
 
-The server uses a single event loop with `poll()`/`epoll()`/`kqueue()` for I/O multiplexing, ensuring non-blocking operations throughout.
+The server uses a single event loop with `poll()` for I/O multiplexing, ensuring non-blocking operations throughout.
 
 ## Instructions
 
@@ -42,30 +42,24 @@ Or with a custom configuration file:
 
 ### Testing
 
+Unit tests (C++98):
+```bash
+cd tests && make unit
+```
+
+Integration and conformance tests (requires running server):
+```bash
+cd tests && make integration conformance stress bonus
+```
+
 Stress test with siege:
 ```bash
 siege -c 100 -t 30S http://localhost:8080
 ```
 
-Or with the provided Python stress test:
-```bash
-python3 tests/stress.py
-```
-
 ### Testing Interface (Visual Web UI)
 
-A comprehensive browser-based test interface is provided for validating HTTP server functionality, custom requests, and CGI endpoints.
-
-To use:
-1. Compile and run the server:
-   ```bash
-   make
-   ./webserv config/default.conf
-   ```
-2. Open your browser and navigate to: `http://localhost:8080`
-3. The test interface loads automatically with 21 pre-configured test scenarios covering GET, POST, DELETE, HEAD requests, status codes, errors, and edge cases.
-4. Use **Run All** to execute all tests at once, or run individual scenarios with the **Run** button.
-5. Use the **Request Builder** for custom HTTP requests with headers and body.
+A browser-based test interface is provided at `http://localhost:8080` with 21 pre-configured scenarios covering GET, POST, DELETE, HEAD requests, status codes, errors, and edge cases.
 
 ## Resources
 
@@ -73,6 +67,15 @@ To use:
 
 - [RFC 7230 - HTTP/1.1: Message Syntax and Routing](https://tools.ietf.org/html/rfc7230)
 - [RFC 7231 - HTTP/1.1: Semantics and Content](https://tools.ietf.org/html/rfc7231)
+- [RFC 3875 - The Common Gateway Interface (CGI) Version 1.1](https://tools.ietf.org/html/rfc3875)
 - [NGINX Documentation](https://nginx.org/en/docs/)
-- [C++98 Standard (ISO/IEC 14882:1998)](https://www.open-std.org/jtc1/sc22/wg21/docs/wp/pdf/oct97/defects.pdf)
 - [Beej's Guide to Network Programming](https://beej.us/guide/bgnet/)
+
+### AI Usage
+
+- Understanding RFC specifications and NGINX behavior for HTTP parsing and response formatting
+- Debugging non-blocking I/O patterns and edge cases in the event loop
+- Writing and reviewing test cases for conformance and stress testing
+- Refactoring for C++98 compliance and eliminating modern C++ patterns
+
+All code was written, reviewed, and tested by the team. AI suggestions were adapted and verified against the subject requirements and actual server behavior.

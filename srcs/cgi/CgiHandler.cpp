@@ -155,7 +155,7 @@ CgiParsedOutput CgiHandler::parse_cgi_output(const std::string& raw_output, CgiR
 }
 
 int CgiHandler::start_cgi(const HttpRequest& req,
-    const ServerConfig& server_config, CgiProcessInfo& out_info) const
+    const ServerConfig& server_config, CgiProcessInfo& out_info, int client_fd) const
 {
     const LocationConfig* location_config = find_best_matching_location(req, server_config);
     if (!location_config) {
@@ -167,6 +167,6 @@ int CgiHandler::start_cgi(const HttpRequest& req,
         return validation_status;
     }
 
-    out_info = _executor.start_cgi(req, *location_config);
+    out_info = _executor.start_cgi(req, *location_config, server_config, client_fd);
     return 0;
 }

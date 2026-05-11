@@ -23,7 +23,7 @@ class CgiHandler {
         ~CgiHandler();
 
         bool is_cgi_request(const HttpRequest& req, const ServerConfig& server_config) const;
-        int start_cgi(const HttpRequest& req, const ServerConfig& server_config, CgiProcessInfo& out_info) const;
+        int start_cgi(const HttpRequest& req, const ServerConfig& server_config, CgiProcessInfo& out_info, int client_fd = -1) const;
         CgiParsedOutput parse_cgi_output(const std::string& raw_output, CgiResult::Status execution_status) const;
 
     private:

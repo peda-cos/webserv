@@ -32,10 +32,12 @@ UriPathParts CgiEnvBuilder::extract_path_parts(const HttpRequest& request, const
     return parts;
 }
 
-void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const LocationConfig& location) {
+void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const LocationConfig& location,
+    const std::string& script_filename, const std::string& server_name,
+    const std::string& server_port, const std::string& remote_addr) {
     std::string server_protocol = "HTTP/" + request.httpVersion;
     env_map["SERVER_PROTOCOL"] = server_protocol;
-    
+
     env_map["SERVER_SOFTWARE"] = "Webserv/1.0";
     env_map["GATEWAY_INTERFACE"] = "CGI/1.1";
 
@@ -47,6 +49,19 @@ void CgiEnvBuilder::build_fundamental_envs(const HttpRequest& request, const Loc
     UriPathParts path_parts = extract_path_parts(request, location);
     env_map["SCRIPT_NAME"] = path_parts.script_name;
     env_map["PATH_INFO"] = path_parts.path_info;
+
+    if (!script_filename.empty()) {
+        env_map["SCRIPT_FILENAME"] = script_filename;
+    }
+    if (!server_name.empty()) {
+        env_map["SERVER_NAME"] = server_name;
+    }
+    if (!server_port.empty()) {
+        env_map["SERVER_PORT"] = server_port;
+    }
+    if (!remote_addr.empty()) {
+        env_map["REMOTE_ADDR"] = remote_addr;
+    }
 }
 
 
@@ -88,8 +103,10 @@ void CgiEnvBuilder::build_envp() {
     envp[index] = NULL;
 }
 
-CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location) : envp(NULL) {
-    build_fundamental_envs(request, location);
+CgiEnvBuilder::CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location,
+    const std::string& script_filename, const std::string& server_name,
+    const std::string& server_port, const std::string& remote_addr) : envp(NULL) {
+    build_fundamental_envs(request, location, script_filename, server_name, server_port, remote_addr);
     build_query_string_env(request);
     if (request.method == "POST") {
         build_envs_for_post_request(request);

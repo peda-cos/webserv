@@ -32,6 +32,7 @@
 #include <CgiException.hpp>
 #include <HttpRequest.hpp>
 #include <LocationConfig.hpp>
+#include <ServerConfig.hpp>
 #include <Enums.hpp>
 #include <StringUtils.hpp>
 
@@ -58,9 +59,9 @@ namespace {
 			}
 	};
 
-	CgiResult sync_execute(CgiExecutor& executor, const HttpRequest& req, const LocationConfig& config, const std::string& test_name = "unknown") {
+	CgiResult sync_execute(CgiExecutor& executor, const HttpRequest& req, const LocationConfig& config, const ServerConfig& srv, const std::string& test_name = "unknown") {
 		(void)test_name;
-		CgiProcessInfo info = executor.start_cgi(req, config);
+		CgiProcessInfo info = executor.start_cgi(req, config, srv, -1);
 		std::string output;
 		char buffer[4096];
 		size_t body_written = 0;
@@ -140,8 +141,9 @@ TEST(CgiExecutor, GetRequestNoStdinPassed)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// GET should send empty stdin
@@ -179,8 +181,9 @@ TEST(CgiExecutor, PostBodyPassedViaStdin)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Body length should match
@@ -215,8 +218,9 @@ TEST(CgiExecutor, RequestMethodEnvVarGet)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("METHOD:GET") != std::string::npos);
@@ -252,8 +256,9 @@ TEST(CgiExecutor, RequestMethodEnvVarPost)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("METHOD:POST") != std::string::npos);
@@ -291,8 +296,9 @@ TEST(CgiExecutor, ContentLengthEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	std::string expected_len = StringUtils::to_string((int)post_body.length());
@@ -323,8 +329,9 @@ TEST(CgiExecutor, ScriptOutputCaptured)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("Hello from CGI script") != std::string::npos);
@@ -357,8 +364,9 @@ TEST(CgiExecutor, SuccessfulExit)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Exit 0 should succeed (not empty, contains output)
@@ -389,8 +397,9 @@ TEST(CgiExecutor, ErrorExitCode)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Non-zero exit should return error indicator or empty
@@ -417,8 +426,9 @@ TEST(CgiExecutor, MissingHandlerThrows)
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 	// .unknown is NOT registered
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Missing handler should return empty or error indication
@@ -439,8 +449,9 @@ TEST(CgiExecutor, ScriptNotFoundThrows)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// File not found should return empty or error indication
@@ -476,8 +487,9 @@ TEST(CgiExecutor, QueryStringEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Should have query string with both params
@@ -513,8 +525,9 @@ TEST(CgiExecutor, GatewayInterfaceSet)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("GI:CGI/") != std::string::npos);
@@ -549,8 +562,9 @@ TEST(CgiExecutor, ServerProtocolEnv)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("SP:HTTP/1.1") != std::string::npos);
@@ -587,8 +601,9 @@ TEST(CgiExecutor, LargePostBody)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("READ:50000") != std::string::npos);
@@ -624,8 +639,9 @@ TEST(CgiExecutor, EmptyPostBody)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("BYTES:0") != std::string::npos);
@@ -659,8 +675,9 @@ TEST(CgiExecutor, OutputWithNewlines)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("Line 1") != std::string::npos);
@@ -692,11 +709,12 @@ TEST(CgiExecutor, SequentialExecutions)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
 
 	// Execute 5 times
 	for (int i = 0; i < 5; ++i) {
-		CgiResult result = sync_execute(executor, req, config);
+		CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 		ASSERT_TRUE(output.find("OK") != std::string::npos);
 	}
@@ -724,15 +742,16 @@ TEST(CgiExecutor, DifferentScripts)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
 
 	HttpRequest req1;
 	req1.setMethod(GET).setUriPath("/test_script1.py").setVersion("HTTP/1.1");
-	CgiResult result1 = sync_execute(executor, req1, config);
+	CgiResult result1 = sync_execute(executor, req1, config, srv);
 
 	HttpRequest req2;
 	req2.setMethod(GET).setUriPath("/test_script2.py").setVersion("HTTP/1.1");
-	CgiResult result2 = sync_execute(executor, req2, config);
+	CgiResult result2 = sync_execute(executor, req2, config, srv);
 
 	ASSERT_TRUE(result1.output.find("Script1") != std::string::npos);
 	ASSERT_TRUE(result2.output.find("Script2") != std::string::npos);
@@ -763,8 +782,9 @@ TEST(CgiExecutor, ExitCodeInException)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Non-zero exit should return empty or error indication
@@ -803,8 +823,9 @@ TEST(CgiExecutor, ContentTypeForwarded)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("CT:application/json") != std::string::npos);
@@ -848,8 +869,9 @@ TEST(CgiExecutor, VerifyRequestMethodReallySet)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// Should contain OK, not MISSING or WRONG
@@ -895,8 +917,9 @@ TEST(CgiExecutor, VerifyContentLengthReallySet)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	ASSERT_TRUE(output.find("OK") != std::string::npos);
@@ -934,8 +957,9 @@ TEST(CgiExecutor, ScriptNameEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// If SCRIPT_NAME is not implemented, output will be empty or 'SN:'
@@ -976,8 +1000,9 @@ TEST(CgiExecutor, PathInfoEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// PATH_INFO should be present (possibly empty for this simple case)
@@ -1014,8 +1039,9 @@ TEST(CgiExecutor, HttpHeaderForwarding)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// HTTP_* headers should be forwarded
@@ -1049,8 +1075,9 @@ TEST(CgiExecutor, PathResolutionIgnoresQueryString)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 	ASSERT_TRUE(output.find("QUERYPATH:OK") != std::string::npos);
 
@@ -1071,8 +1098,9 @@ TEST(CgiExecutor, MissingExtensionThrowsCgiException)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	ASSERT_THROWS(sync_execute(executor, req, config), CgiException);
+	ASSERT_THROWS(sync_execute(executor, req, config, srv), CgiException);
 }
 
 /* ========================================================================== */
@@ -1110,10 +1138,11 @@ TEST(CgiExecutor, CGITimeoutReturns504)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
 	
 	// Timeout should result in empty output (script killed before "Done")
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 	
 	// If timeout works: "Done" should NOT be in output
@@ -1151,10 +1180,11 @@ TEST(CgiExecutor, ExecveFailureReturns500)
 	// Set a handler that points to nonexistent interpreter
 	config.cgi_handlers[".py"] = "/usr/bin/nonexistent_python_interpreter_xyz_9999";
 
+		ServerConfig srv;
 	CgiExecutor executor;
 	
 	// When execve() fails (interpreter not found), should return empty/error
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 	
 	// Script should NOT have executed if interpreter doesn't exist
@@ -1203,8 +1233,9 @@ TEST(CgiExecutor, PHPCgiExecution)
 	config.root = "/tmp";
 	config.cgi_handlers[".php"] = "/usr/bin/php-cgi";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// PHP should have executed and output should contain "PHPMETHOD:GET"
@@ -1249,8 +1280,9 @@ TEST(CgiExecutor, ChunkedBodyDecodingBeforeCgi)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// If chunked decoding is implemented:
@@ -1303,8 +1335,9 @@ TEST(CgiExecutor, ServerNameEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// RFC 3875 requires SERVER_NAME to be set
@@ -1340,8 +1373,9 @@ TEST(CgiExecutor, ServerPortEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// RFC 3875 requires SERVER_PORT to be set
@@ -1377,8 +1411,9 @@ TEST(CgiExecutor, RemoteAddrEnvVar)
 	config.root = "/tmp";
 	config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
 	CgiExecutor executor;
-	CgiResult result = sync_execute(executor, req, config);
+	CgiResult result = sync_execute(executor, req, config, srv);
 	std::string output = result.output;
 
 	// RFC 3875 requires REMOTE_ADDR to be set

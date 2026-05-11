@@ -6,6 +6,7 @@
 #include <CgiExecutor.hpp>
 #include <HttpRequest.hpp>
 #include <LocationConfig.hpp>
+#include <ServerConfig.hpp>
 #include <StringUtils.hpp>
 #include <unistd.h>
 #include <fstream>
@@ -20,8 +21,8 @@ namespace {
         return system("which python3 > /dev/null 2>&1") == 0;
     }
 
-    CgiResult sync_execute(CgiExecutor& executor, const HttpRequest& req, const LocationConfig& config) {
-        CgiProcessInfo info = executor.start_cgi(req, config);
+    CgiResult sync_execute(CgiExecutor& executor, const HttpRequest& req, const LocationConfig& config, const ServerConfig& srv) {
+        CgiProcessInfo info = executor.start_cgi(req, config, srv, -1);
         std::string output;
         char buffer[4096];
         size_t body_written = 0;
@@ -80,10 +81,11 @@ TEST(SessionPersistence, CookieFlow) {
     
     config.cgi_handlers[".py"] = "/usr/bin/python3";
 
+		ServerConfig srv;
     CgiExecutor executor;
 
     // --- FIRST VISIT (No Cookie) ---
-    CgiResult result1 = sync_execute(executor, req, config);
+    CgiResult result1 = sync_execute(executor, req, config, srv);
     
     // Validate Visit Count 1
     ASSERT_TRUE(result1.output.find("Visit Count: 1") != std::string::npos);
@@ -113,7 +115,7 @@ TEST(SessionPersistence, CookieFlow) {
         .setVersion("HTTP/1.1")
         .addHeader("Cookie", "session_id=" + sessionId);
 
-    CgiResult result2 = sync_execute(executor, req2, config);
+    CgiResult result2 = sync_execute(executor, req2, config, srv);
     
     // Validate Visit Count 2
     ASSERT_TRUE(result2.output.find("Visit Count: 2") != std::string::npos);
@@ -127,7 +129,7 @@ TEST(SessionPersistence, CookieFlow) {
         .setVersion("HTTP/1.1")
         .addHeader("Cookie", "session_id=nonexistent_session_999");
 
-    CgiResult result3 = sync_execute(executor, req3, config);
+    CgiResult result3 = sync_execute(executor, req3, config, srv);
     
     // Should reset count to 1 and generate a new ID
     ASSERT_TRUE(result3.output.find("Visit Count: 1") != std::string::npos);
@@ -149,12 +151,13 @@ TEST(SessionPersistence, MultipleCookies) {
         config.root = s_cwd.substr(0, last_slash);
     } else { config.root = ".."; }
     config.cgi_handlers[".py"] = "/usr/bin/python3";
+		ServerConfig srv;
     CgiExecutor executor;
 
     // First visit to get an ID
     HttpRequest req1;
     req1.setMethod("GET").setUriPath("/www/cgi/session.py").setVersion("HTTP/1.1");
-    CgiResult res1 = sync_execute(executor, req1, config);
+    CgiResult res1 = sync_execute(executor, req1, config, srv);
     
     std::string sidMarker = "session_id=";
     size_t start = res1.output.find(sidMarker) + sidMarker.length();
@@ -168,7 +171,7 @@ TEST(SessionPersistence, MultipleCookies) {
         .setVersion("HTTP/1.1")
         .addHeader("Cookie", "theme=dark; session_id=" + sessionId + "; lang=en-US");
 
-    CgiResult res2 = sync_execute(executor, req2, config);
+    CgiResult res2 = sync_execute(executor, req2, config, srv);
     
     ASSERT_TRUE(res2.output.find("Visit Count: 2") != std::string::npos);
     ASSERT_TRUE(res2.output.find("Session ID: " + sessionId) != std::string::npos);
@@ -194,6 +197,7 @@ TEST(SessionPersistence, CorruptedSessionFile) {
         config.root = s_cwd.substr(0, last_slash);
     } else { config.root = ".."; }
     config.cgi_handlers[".py"] = "/usr/bin/python3";
+		ServerConfig srv;
     CgiExecutor executor;
 
     HttpRequest req;
@@ -202,7 +206,7 @@ TEST(SessionPersistence, CorruptedSessionFile) {
        .setVersion("HTTP/1.1")
        .addHeader("Cookie", "session_id=" + corruptedId);
 
-    CgiResult res = sync_execute(executor, req, config);
+    CgiResult res = sync_execute(executor, req, config, srv);
     
     // The script should handle the ValueError and reset visits to 0 + 1 = 1
     ASSERT_TRUE(res.output.find("Visit Count: 1") != std::string::npos);

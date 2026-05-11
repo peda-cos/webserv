@@ -21,12 +21,20 @@ class CgiEnvBuilder {
         void build_headers_envs(const HttpRequest& request);
         void build_query_string_env(const HttpRequest& request);
         void build_envs_for_post_request(const HttpRequest& request);
-        void build_fundamental_envs(const HttpRequest& request, const LocationConfig& location);
-        
+        void build_fundamental_envs(const HttpRequest& request, const LocationConfig& location,
+                                    const std::string& script_filename,
+                                    const std::string& server_name,
+                                    const std::string& server_port,
+                                    const std::string& remote_addr);
+
         UriPathParts extract_path_parts(const HttpRequest& request, const LocationConfig& location);
-    
+
     public:
-        CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location);
+        CgiEnvBuilder(const HttpRequest& request, const LocationConfig& location,
+                      const std::string& script_filename = "",
+                      const std::string& server_name = "",
+                      const std::string& server_port = "",
+                      const std::string& remote_addr = "");
         ~CgiEnvBuilder();
 
         char** getEnvp() const;
