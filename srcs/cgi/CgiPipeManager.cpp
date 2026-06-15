@@ -31,16 +31,3 @@ void CgiPipeManager::setup_child_process() const
     close(stdout_pipe[0]);
     close(stdout_pipe[1]);
 }
-
-void CgiPipeManager::setup_parent_process() const
-{
-    close(stdin_pipe[0]);
-    close(stdout_pipe[1]);
-}
-
-void CgiPipeManager::close_all() {
-    if (stdin_pipe[0] != -1) { close(stdin_pipe[0]); stdin_pipe[0] = -1; }
-    if (stdin_pipe[1] != -1) { close(stdin_pipe[1]); stdin_pipe[1] = -1; }
-    if (stdout_pipe[0] != -1) { close(stdout_pipe[0]); stdout_pipe[0] = -1; }
-    if (stdout_pipe[1] != -1) { close(stdout_pipe[1]); stdout_pipe[1] = -1; }
-}

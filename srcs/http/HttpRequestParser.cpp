@@ -176,8 +176,8 @@ void HttpRequestParser::_parseRequestLine() {
     }
 
     std::string httpVersion = versionToken.substr(HTTP_VERSION_PREFIX.length());
-    if (!_isSupportedHttpVersion(httpVersion)) {
-        _request.setErrorCode(505);
+    if (httpVersion.find('.') == std::string::npos || !_isSupportedHttpVersion(httpVersion)) {
+        _request.setErrorCode(httpVersion.find('.') == std::string::npos ? 400 : 505);
         return;
     }
 

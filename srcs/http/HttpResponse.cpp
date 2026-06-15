@@ -1,33 +1,10 @@
 #include <HttpResponse.hpp>
 #include <Constants.hpp>
 #include <StringUtils.hpp>
+#include <HttpResponseBuilder.hpp>
 
 #include <cctype>
 #include <ctime>
-
-namespace {
-    static std::string reason_phrase(int status_code)
-    {
-        switch (status_code) {
-            case 200: return "OK";
-            case 201: return "Created";
-            case 204: return "No Content";
-            case 301: return "Moved Permanently";
-            case 302: return "Found";
-            case 400: return "Bad Request";
-            case 403: return "Forbidden";
-            case 404: return "Not Found";
-            case 405: return "Method Not Allowed";
-            case 413: return "Payload Too Large";
-            case 431: return "Request Header Fields Too Large";
-            case 500: return "Internal Server Error";
-            case 501: return "Not Implemented";
-            case 504: return "Gateway Timeout";
-            case 505: return "HTTP Version Not Supported";
-            default: return "Internal Server Error";
-        }
-    }
-}
 
 static std::string format_http_date() {
     std::time_t now = std::time(NULL);
@@ -71,7 +48,7 @@ HttpResponse &HttpResponse::setHeaders(const std::vector< std::pair<std::string,
 
 std::string HttpResponse::toString() const
 {
-    std::string response = "HTTP/1.1 " + StringUtils::to_string(status_code) + " " + reason_phrase(status_code);
+    std::string response = "HTTP/1.1 " + StringUtils::to_string(status_code) + " " + HttpResponseBuilder::reasonPhraseFor(status_code);
     response += CARRIAGE_RETURN_LINE_FEED;
 
     bool has_content_length = false;

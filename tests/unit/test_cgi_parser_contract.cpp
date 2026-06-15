@@ -53,11 +53,11 @@ TEST(CgiParserContract, PathResolutionIgnoresQueryString)
 	}
 
 	HttpRequest req;
-	req.setMethod(GET)
+	req.setMethod("GET")
 	   .setUri("/query_contract.py?foo=bar")
 	   .setPath("/query_contract.py")
 	   .setQueryString("foo=bar")
-	   .setVersion("HTTP/1.1");
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -111,10 +111,10 @@ TEST(CgiParserContract, PathResolutionIgnoresQueryString)
 TEST(CgiParserContract, MissingExtensionThrowsCgiException)
 {
 	HttpRequest req;
-	req.setMethod(GET)
+	req.setMethod("GET")
 	   .setUri("/script_without_extension")
 	   .setPath("/script_without_extension")
-	   .setVersion("HTTP/1.1");
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";

@@ -8,8 +8,6 @@
 #include <sstream>
 #include <Server.hpp> 
 
-void testCGIExecutor();
-
 int main(int argc, char* argv[]) {
     std::string path = (argc > 1) ? argv[1] : "config/default.conf";
     try {

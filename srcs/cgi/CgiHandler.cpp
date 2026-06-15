@@ -91,15 +91,6 @@ namespace {
 CgiHandler::CgiHandler() : _executor() {}
 CgiHandler::~CgiHandler() {}
 
-bool CgiHandler::is_cgi_request(const HttpRequest& req, const ServerConfig& server_config) const {
-    const LocationConfig* loc = find_best_matching_location(req, server_config);
-    if (!loc) return false;
-    std::string ext;
-    size_t slash_pos = 0;
-    return CgiUtils::extract_extension(request_target(req), ext, slash_pos) && 
-           loc->cgi_handlers.find(ext) != loc->cgi_handlers.end();
-}
-
 int CgiHandler::validate_request(const HttpRequest& req, const ServerConfig& server_config, const LocationConfig& location_config) const {
     if (!location_config.limit_except.empty()) {
         bool allowed = false;
@@ -123,15 +114,15 @@ int CgiHandler::validate_request(const HttpRequest& req, const ServerConfig& ser
     return (stat(script_path.c_str(), &st) == 0) ? 0 : 404;
 }
 
-CgiParsedOutput CgiHandler::parse_cgi_output(const std::string& raw_output, CgiResult::Status execution_status) const {
+CgiParsedOutput CgiHandler::parse_cgi_output(const std::string& raw_output, CgiExecutionStatus execution_status) const {
     CgiParsedOutput parsed;
 
-    if (execution_status == CgiResult::TIMEOUT) {
+    if (execution_status == CGI_EXEC_TIMEOUT) {
         parsed.status_code = 504;
         parsed.body = "CGI execution timed out";
         return parsed;
     }
-    if (execution_status != CgiResult::SUCCESS) {
+    if (execution_status != CGI_EXEC_SUCCESS) {
         parsed.status_code = 500;
         parsed.body = raw_output.empty() ? "CGI execution failed" : raw_output;
         return parsed;

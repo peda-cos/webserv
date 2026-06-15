@@ -12,10 +12,8 @@ class CgiPipeManager {
         CgiPipeManager();
         ~CgiPipeManager();
         void setup_child_process() const;
-        void setup_parent_process() const;
         int* get_stdin_pipe() { return stdin_pipe; }
         int* get_stdout_pipe() { return stdout_pipe; }
-        void close_all();
 };
 
 #endif

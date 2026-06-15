@@ -25,8 +25,7 @@ PURE_UNIT_TESTS = \
 	$(UNIT_DIR)/test_cgi_executor \
 	$(UNIT_DIR)/test_chunked_decoder \
 	$(UNIT_DIR)/test_http_response_builder \
-	$(UNIT_DIR)/test_session_persistence \
-	$(UNIT_DIR)/test_method_handlers
+	$(UNIT_DIR)/test_session_persistence
 
 # TDD stub tests (expected to fail - informational only)
 STUB_TESTS = 
@@ -154,8 +153,6 @@ $(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_D
 		-o $@ $< \
 		../srcs/config/ConfigLexer.cpp \
 		../srcs/config/ConfigParser.cpp \
-		../srcs/config/ConfigParserServer.cpp \
-		../srcs/config/ConfigParserLocation.cpp \
 		../srcs/config/ParserSyntaxError.cpp \
 		../srcs/utils/ConfigUtils.cpp \
 		../srcs/utils/ParsingUtils.cpp \
@@ -164,11 +161,12 @@ $(UNIT_DIR)/test_config_parser: $(UNIT_DIR)/test_config_parser.cpp $(FRAMEWORK_D
 
 $(UNIT_DIR)/test_http_request_parser: $(UNIT_DIR)/test_http_request_parser.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) \
-		-I$(FRAMEWORK_DIR) -I../includes -I../includes/http \
+		-I$(FRAMEWORK_DIR) -I../includes -I../includes/http -I../includes/utils \
 		-o $@ $< \
 		../srcs/http/HttpRequest.cpp \
 		../srcs/http/HttpRequestParser.cpp \
-		../srcs/http/ChunkedDecoder.cpp
+		../srcs/http/ChunkedDecoder.cpp \
+		../srcs/utils/HttpUtils.cpp
 
 $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.cpp $(FRAMEWORK_DIR)/minitest.hpp
 	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -I../includes/http -I../includes/utils -I../includes/config -o $@ $< \
@@ -176,17 +174,6 @@ $(UNIT_DIR)/test_http_response_builder: $(UNIT_DIR)/test_http_response_builder.c
 		../srcs/http/HttpResponse.cpp \
 		../srcs/http/MimeTypes.cpp \
 		../srcs/utils/StringUtils.cpp
-
-$(UNIT_DIR)/test_method_handlers: $(UNIT_DIR)/test_method_handlers.cpp $(FRAMEWORK_DIR)/minitest.hpp
-	$(CXX) $(CXXFLAGS) -I$(FRAMEWORK_DIR) -I../includes -I../includes/config -I../includes/utils -I../includes/server -I../includes/http -I../includes/cgi -o $@ $< \
-		../srcs/server/RequestRouter.cpp \
-		../srcs/server/MethodHandler.cpp \
-		../srcs/utils/CgiUtils.cpp \
-		../srcs/utils/HttpUtils.cpp \
-		../srcs/utils/StringUtils.cpp \
-		../srcs/http/HttpResponseBuilder.cpp \
-		../srcs/http/HttpResponse.cpp \
-		../srcs/http/MimeTypes.cpp
 
 UTILS_SRCS = ../srcs/utils/CgiUtils.cpp ../srcs/utils/HttpUtils.cpp ../srcs/utils/Logger.cpp ../srcs/utils/ParsingUtils.cpp ../srcs/utils/StringUtils.cpp
 HTTP_SRCS = ../srcs/http/HttpRequest.cpp
@@ -250,13 +237,10 @@ $(UNIT_DIR)/test_connection_loop: $(UNIT_DIR)/test_connection_loop.cpp $(FRAMEWO
 		-o $@ $< \
 		../srcs/server/Server.cpp \
 		../srcs/server/RequestRouter.cpp \
-		../srcs/server/MethodHandler.cpp \
 		../srcs/utils/Logger.cpp \
 		../srcs/utils/CgiUtils.cpp \
 		../srcs/config/ConfigLexer.cpp \
 		../srcs/config/ConfigParser.cpp \
-		../srcs/config/ConfigParserServer.cpp \
-		../srcs/config/ConfigParserLocation.cpp \
 		../srcs/config/ParserSyntaxError.cpp \
 		../srcs/utils/ConfigUtils.cpp \
 		../srcs/utils/HttpUtils.cpp \

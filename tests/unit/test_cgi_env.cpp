@@ -29,9 +29,9 @@ LocationConfig create_test_location() {
 TEST(CgiEnv, RequestMethodGet)
 {
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/cgi-bin/test.py")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("GET")
+	   .setUri("/cgi-bin/test.py").setPath("/cgi-bin/test.py")
+	   .setHttpVersion("1.1");
 
 	LocationConfig loc = create_test_location();
 	CgiEnvBuilder builder(req, loc);
@@ -42,9 +42,9 @@ TEST(CgiEnv, RequestMethodGet)
 TEST(CgiEnv, RequestMethodPost)
 {
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/cgi-bin/submit.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/cgi-bin/submit.py").setPath("/cgi-bin/submit.py")
+	   .setHttpVersion("1.1")
 	   .setBody("data=hello");
 
 	LocationConfig loc = create_test_location();
@@ -57,9 +57,9 @@ TEST(CgiEnv, RequestMethodPost)
 TEST(CgiEnv, ContentTypeFromHeaders)
 {
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/cgi-bin/api.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/cgi-bin/api.py").setPath("/cgi-bin/api.py")
+	   .setHttpVersion("1.1")
 	   .setBody("{}")
 	   .addHeader("content-type", "application/json");
 
@@ -72,9 +72,9 @@ TEST(CgiEnv, ContentTypeFromHeaders)
 TEST(CgiEnv, ContentLengthFromHeaders)
 {
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/cgi-bin/upload.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/cgi-bin/upload.py").setPath("/cgi-bin/upload.py")
+	   .setHttpVersion("1.1")
 	   .setBody("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
 	// Note: Content-Length is built from body size in CgiEnvBuilder
 
@@ -88,9 +88,9 @@ TEST(CgiEnv, ContentLengthFromHeaders)
 TEST(CgiEnv, PathInfoFromUri)
 {
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/cgi-bin/script.py/extra/path")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("GET")
+	   .setUri("/cgi-bin/script.py/extra/path").setPath("/cgi-bin/script.py/extra/path")
+	   .setHttpVersion("1.1");
 
 	LocationConfig loc = create_test_location();
 	CgiEnvBuilder builder(req, loc);
@@ -102,9 +102,9 @@ TEST(CgiEnv, PathInfoFromUri)
 TEST(CgiEnv, QueryStringFromUri)
 {
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/cgi-bin/search.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("GET")
+	   .setUri("/cgi-bin/search.py").setPath("/cgi-bin/search.py")
+	   .setHttpVersion("1.1")
 	   .addQueryParameter("key", "value");
 
 	LocationConfig loc = create_test_location();
@@ -116,9 +116,9 @@ TEST(CgiEnv, QueryStringFromUri)
 TEST(CgiEnv, HttpHeadersAreExported)
 {
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/cgi-bin/test.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("GET")
+	   .setUri("/cgi-bin/test.py").setPath("/cgi-bin/test.py")
+	   .setHttpVersion("1.1")
 	   .addHeader("host", "example.com")
 	   .addHeader("x-custom-header", "abc");
 
@@ -131,11 +131,11 @@ TEST(CgiEnv, HttpHeadersAreExported)
 TEST(CgiEnv, ScriptNameUsesParsedPath)
 {
 	HttpRequest req;
-	req.setMethod(GET)
+	req.setMethod("GET")
 	   .setUri("/cgi-bin/test.py?foo=bar")
 	   .setPath("/cgi-bin/test.py")
 	   .setQueryString("foo=bar")
-	   .setVersion("HTTP/1.1");
+	   .setHttpVersion("1.1");
 
 	LocationConfig loc = create_test_location();
 	CgiEnvBuilder builder(req, loc);
@@ -149,9 +149,9 @@ TEST(CgiEnv, ScriptNameUsesParsedPath)
 TEST(CgiEnv, EssentialVarsPresent)
 {
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/cgi-bin/full.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/cgi-bin/full.py").setPath("/cgi-bin/full.py")
+	   .setHttpVersion("1.1")
 	   .setBody("payload")
 	   .addHeader("Content-Type", "text/plain");
 
@@ -181,9 +181,9 @@ TEST(CgiEnv, EssentialVarsPresent)
 TEST(CgiEnv, CookieHeaderIsExported)
 {
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/cgi-bin/test.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("GET")
+	   .setUri("/cgi-bin/test.py").setPath("/cgi-bin/test.py")
+	   .setHttpVersion("1.1")
 	   .addHeader("cookie", "session_id=123; user=jon");
 
 	CgiEnvBuilder builder(req, create_test_location());

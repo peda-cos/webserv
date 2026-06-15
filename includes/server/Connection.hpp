@@ -13,8 +13,7 @@ enum CgiState {
     CGI_NONE,
     CGI_WRITING_IN,
     CGI_READING_OUT,
-    CGI_WAITING_FOR_EXIT,
-    CGI_COMPLETE
+    CGI_WAITING_FOR_EXIT
 };
 
 struct Connection {
