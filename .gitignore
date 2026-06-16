@@ -5,6 +5,8 @@ webserv
 # local/editor artifacts
 .vscode/
 tests/integration/__pycache__/
+__pycache__/
+*.pyc
 
 # Tests
 tests/unit/test_*

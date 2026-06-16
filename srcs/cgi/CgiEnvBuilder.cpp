@@ -97,17 +97,14 @@ void CgiEnvBuilder::build_envs_for_post_request(const HttpRequest& request) {
 void CgiEnvBuilder::build_headers_envs(const HttpRequest& request) {
     const StringMap &headers = request.headers;
     // RFC 3875 §4.1.18: exclude headers already available as meta-variables
-    static const std::string excluded[] = {
-        "content-length", "content-type", "authorization", "connection"
-    };
-    static const size_t excluded_count = sizeof(excluded) / sizeof(excluded[0]);
+    static const std::string excluded0 = "content-length";
+    static const std::string excluded1 = "content-type";
+    static const std::string excluded2 = "authorization";
+    static const std::string excluded3 = "connection";
 
     for (StringMapIterator it = headers.begin(); it != headers.end(); ++it) {
         std::string lower = StringUtils::to_lower(it->first);
-        bool skip = false;
-        for (size_t i = 0; i < excluded_count; ++i) {
-            if (lower == excluded[i]) { skip = true; break; }
-        }
+        bool skip = lower == excluded0 || lower == excluded1 || lower == excluded2 || lower == excluded3;
         if (skip) continue;
         std::string header_name = "HTTP_" + CgiUtils::env_normalize(it->first);
         env_map[header_name] = it->second;
