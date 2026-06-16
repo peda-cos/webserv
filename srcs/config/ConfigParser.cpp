@@ -1,4 +1,5 @@
 #include <sstream>
+#include <set>
 #include <Enums.hpp>
 #include <Logger.hpp>
 #include <ConfigParser.hpp>
@@ -396,12 +397,14 @@ LocationConfig ConfigParser::parse_location_block(const std::map<int, std::strin
 }
 
 Config ConfigParser::parse() {
+    std::map<std::string, std::vector<ServerConfig*> > port_to_servers;
     while (current_token.type != EOF_TOKEN) {
         current_token.directive_type = ParsingUtils::get_root_directive_type(current_token.value);
         switch (current_token.directive_type) {
             case ROOT_SERVER: {
                 ServerConfig server_config = parse_server_block();
                 config.servers.push_back(server_config);
+                port_to_servers[server_config.port].push_back(&config.servers.back());
                 continue;
             }
             default: {
@@ -410,6 +413,21 @@ Config ConfigParser::parse() {
             }
         }
         advance();
+    }
+
+    // Validate duplicate ports: only allowed if all have server_names
+    for (std::map<std::string, std::vector<ServerConfig*> >::iterator it = port_to_servers.begin();
+         it != port_to_servers.end(); ++it) {
+        if (it->second.size() > 1) {
+            for (size_t i = 0; i < it->second.size(); ++i) {
+                if (it->second[i]->server_names.empty()) {
+                    throw ConfigParse::SyntaxException(
+                        "Duplicate listen port without server_name not allowed: " + it->first,
+                        ConfigParse::CONFIG_PARSER_SERVER,
+                        it->second[i]->server_names.empty() ? SourcePosition() : SourcePosition());
+                }
+            }
+        }
     }
 
     return config;

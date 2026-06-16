@@ -1,67 +1,67 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import os
 import sys
+import json
 import uuid
-import pathlib
+import hashlib
 
-# Directory for sessions
-SESSION_DIR = pathlib.Path("/tmp/webserv_sessions")
-SESSION_DIR.mkdir(parents=True, exist_ok=True)
+SESSION_DIR = "/tmp/webserv_sessions"
 
-# 1. Get Cookie from environment
-cookie_header = os.environ.get("HTTP_COOKIE", "")
-session_id = None
 
-# Parse cookies
-cookies = {}
-if cookie_header:
-    parts = cookie_header.split(";")
-    for p in parts:
-        if "=" in p:
-            k, v = p.strip().split("=", 1)
-            cookies[k] = v
+def session_file(session_id):
+    return os.path.join(SESSION_DIR, hashlib.md5(session_id.encode()).hexdigest() + ".json")
 
-session_id = cookies.get("session_id")
-visits = 0
 
-# 2. Check or create session
-if session_id:
-    session_file = SESSION_DIR / f"session_{session_id}"
-    if session_file.exists():
-        with open(session_file, "r") as f:
-            try:
-                visits = int(f.read().strip())
-            except ValueError:
-                visits = 0
-    else:
-        # Invalid session id, treat as new
-        session_id = str(uuid.uuid4())
-        visits = 0
-else:
-    # New session
-    session_id = str(uuid.uuid4())
+def parse_cookies(cookie_header):
+    cookies = {}
+    for part in cookie_header.split(";"):
+        part = part.strip()
+        if "=" in part:
+            key, value = part.split("=", 1)
+            cookies[key.strip()] = value.strip()
+    return cookies
+
+
+def main():
+    if not os.path.isdir(SESSION_DIR):
+        os.makedirs(SESSION_DIR)
+
+    cookies = parse_cookies(os.environ.get("HTTP_COOKIE", ""))
+    session_id = cookies.get("session_id", "")
+    new_session = False
     visits = 0
 
-visits += 1
+    if session_id:
+        try:
+            with open(session_file(session_id), "r") as handle:
+                data = json.load(handle)
+                visits = int(data.get("visits", 0))
+        except Exception:
+            session_id = str(uuid.uuid4())
+            new_session = True
+            visits = 0
+    else:
+        session_id = str(uuid.uuid4())
+        new_session = True
 
-# 3. Save session
-session_file = SESSION_DIR / f"session_{session_id}"
-with open(session_file, "w") as f:
-    f.write(str(visits))
+    visits += 1
+    with open(session_file(session_id), "w") as handle:
+        json.dump({"visits": visits}, handle)
 
-# 4. Output headers
-print("Content-Type: text/html")
-# HttpOnly prevents JavaScript access, Path=/ restricts scope
-print(f"Set-Cookie: session_id={session_id}; Path=/; HttpOnly")
-print("")
+    body = {
+        "session_id": session_id,
+        "visits": visits,
+        "html": "Session ID: " + session_id + "\nVisit Count: " + str(visits)
+    }
+    encoded = json.dumps(body)
 
-# 5. Output body
-print("<html>")
-print("<head><title>Webserv Session Test</title></head>")
-print("<body>")
-print(f"<h1>Session ID: {session_id}</h1>")
-print(f"<h2>Visit Count: {visits}</h2>")
-print("<p>Refresh the page to see the counter increment!</p>")
-print("<p><a href='/'>Go Home</a></p>")
-print("</body>")
-print("</html>")
+    sys.stdout.write("Content-Type: application/json\r\n")
+    if new_session:
+        sys.stdout.write("Set-Cookie: session_id=" + session_id + "; Path=/; HttpOnly\r\n")
+    sys.stdout.write("Content-Length: " + str(len(encoded)) + "\r\n")
+    sys.stdout.write("\r\n")
+    sys.stdout.write(encoded)
+
+
+if __name__ == "__main__":
+    main()

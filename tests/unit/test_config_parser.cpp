@@ -177,7 +177,7 @@ TEST(ConfigParser, EmptyFileReturnsNoServers)
 	ASSERT_EQ(0, static_cast<int>(result.size()));
 }
 
-TEST(ConfigParser, DuplicateListenAcceptedForNow)
+TEST(ConfigParser, DuplicateListenPortThrows)
 {
 	std::string conf =
 		"server {\n"
@@ -187,8 +187,7 @@ TEST(ConfigParser, DuplicateListenAcceptedForNow)
 		"    listen 0.0.0.0:8080;\n"
 		"}\n";
 
-	std::vector<ServerConfig> result = TestConfigParser::parse(conf);
-	ASSERT_EQ(2, static_cast<int>(result.size()));
+	ASSERT_THROWS(TestConfigParser::parse(conf), ConfigParseException);
 }
 
 TEST(ConfigParser, ListenPortOutOfRangeThrows)

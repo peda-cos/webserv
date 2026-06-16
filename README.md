@@ -1,4 +1,4 @@
-*jlacerda | lpaula-n | peda-cos*
+*This project has been created as part of the 42 curriculum by jlacerda, lpaula-n, peda-cos*
 
 ## Description
 
