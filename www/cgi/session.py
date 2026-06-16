@@ -44,8 +44,6 @@ else:
     session_id = str(uuid.uuid4())
     new_session = True
 
-visits += 1
-
 # Save session data
 session_file = os.path.join(SESSION_DIR, hashlib.md5(session_id.encode()).hexdigest() + ".json")
 with open(session_file, "w") as handle:
