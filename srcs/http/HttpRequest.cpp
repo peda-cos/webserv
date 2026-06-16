@@ -1,29 +1,5 @@
 #include <HttpRequest.hpp>
-
-static std::string httpMethodToString(HttpMethod method) {
-    switch (method) {
-        case GET:
-            return "GET";
-        case POST:
-            return "POST";
-        case DELETE:
-            return "DELETE";
-        case PUT:
-            return "PUT";
-        case HEAD:
-            return "HEAD";
-        case CONNECT:
-            return "CONNECT";
-        case OPTIONS:
-            return "OPTIONS";
-        case TRACE:
-            return "TRACE";
-        case PATCH:
-            return "PATCH";
-        default:
-            return "";
-    }
-}
+#include <HttpUtils.hpp>
 
 HttpRequest::HttpRequest()
     : method()
@@ -51,17 +27,7 @@ HttpRequest& HttpRequest::setMethod(std::string method) {
     return *this;
 }
 
-HttpRequest& HttpRequest::setMethod(HttpMethod method) {
-    return setMethod(httpMethodToString(method));
-}
-
 HttpRequest& HttpRequest::setPath(std::string path) {
-    this->path = path;
-    return *this;
-}
-
-HttpRequest& HttpRequest::setUriPath(std::string path) {
-    this->uri = path;
     this->path = path;
     return *this;
 }
@@ -74,13 +40,6 @@ HttpRequest& HttpRequest::setQueryString(std::string queryString) {
 HttpRequest& HttpRequest::setHttpVersion(std::string httpVersion) {
     this->httpVersion = httpVersion;
     return *this;
-}
-
-HttpRequest& HttpRequest::setVersion(std::string httpVersion) {
-    if (httpVersion.length() > 5 && httpVersion.substr(0, 5) == "HTTP/") {
-        return setHttpVersion(httpVersion.substr(5));
-    }
-    return setHttpVersion(httpVersion);
 }
 
 HttpRequest& HttpRequest::addHeader(std::string key, std::string value) {

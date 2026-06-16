@@ -8,6 +8,7 @@
 #include <RequestRouter.hpp>
 #include <CgiUtils.hpp>
 #include <HttpUtils.hpp>
+#include <CgiHandler.hpp>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -31,12 +32,6 @@
 #define CONNECTION_TIMEOUT_SEC  5
 
 namespace {
-    void append_cors_headers(HttpResponseBuilder& builder) {
-        builder.setHeader("Access-Control-Allow-Origin", "*");
-        builder.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, HEAD, PUT, OPTIONS");
-        builder.setHeader("Access-Control-Allow-Headers", "*");
-    }
-
     bool is_unimplemented_method(const std::string& method) {
         return method != "GET" && method != "HEAD" && method != "POST" &&
                method != "DELETE" && method != "OPTIONS" && method != "PUT";
@@ -58,7 +53,6 @@ namespace {
                .setContentType("text/html")
                .setBody(body)
                .setConnection("close");
-        append_cors_headers(builder);
         return builder.build();
     }
 
@@ -588,7 +582,6 @@ bool Server::_queue_parsed_request_response(int fd) {
                    .setContentType("text/html")
                    .setBody(HttpResponseBuilder::buildErrorBody(loc->return_code, ""))
                    .setConnection(conn_header);
-            append_cors_headers(builder);
             conn.write_buffer = builder.build();
         } else if (is_unimplemented_method(req.method)) {
             conn.write_buffer = _build_error_response(501, *srv_cfg, loc, conn_header);
@@ -604,7 +597,6 @@ bool Server::_queue_parsed_request_response(int fd) {
                    .setBody(HttpResponseBuilder::buildErrorBody(405, ""))
                    .setContentType("text/html")
                    .setConnection(conn_header);
-            append_cors_headers(builder);
             conn.write_buffer = builder.build();
         } else {
             if (!loc->cgi_handlers.empty()) {
@@ -735,7 +727,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
     if (req.method == "OPTIONS") {
         HttpResponseBuilder builder;
         builder.setStatus(204).setConnection(conn_header);
-        append_cors_headers(builder);
         return builder.build();
     }
 
@@ -754,7 +745,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                        .setContentType("text/html")
                        .setBody(HttpResponseBuilder::buildErrorBody(301, ""))
                        .setConnection(conn_header);
-                append_cors_headers(builder);
                 return builder.build();
             }
             if (!loc.index.empty()) {
@@ -774,7 +764,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                     } else {
                         builder.setBody(content);
                     }
-                    append_cors_headers(builder);
                     return builder.build();
                 }
             }
@@ -792,7 +781,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                     } else {
                         builder.setBody(listing);
                     }
-                    append_cors_headers(builder);
                     return builder.build();
                 }
             }
@@ -816,7 +804,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                 } else {
                     builder.setBody(content);
                 }
-                append_cors_headers(builder);
                 return builder.build();
             }
         }
@@ -838,7 +825,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                    .setBody(HttpResponseBuilder::buildErrorBody(405, ""))
                    .setContentType("text/html")
                    .setConnection(conn_header);
-            append_cors_headers(builder);
             return builder.build();
         }
 
@@ -863,7 +849,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                .setBody("Created")
                .setContentType("text/plain")
                .setConnection(conn_header);
-        append_cors_headers(builder);
         return builder.build();
     }
 
@@ -883,7 +868,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
 
         HttpResponseBuilder builder;
         builder.setStatus(204).setConnection(conn_header);
-        append_cors_headers(builder);
         return builder.build();
     }
 
@@ -909,7 +893,6 @@ std::string Server::_serve_static_response(const HttpRequest& req, const std::st
                .setBody(HttpResponseBuilder::buildErrorBody(405, ""))
                .setContentType("text/html")
                .setConnection(conn_header);
-        append_cors_headers(builder);
         return builder.build();
     }
 }
@@ -927,7 +910,6 @@ std::string Server::_build_error_response(int code, const ServerConfig& server, 
                    .setContentType("text/html")
                    .setBody(HttpResponseBuilder::buildErrorBody(302, ""))
                    .setConnection(conn_header);
-            append_cors_headers(builder);
             return builder.build();
         }
 
@@ -940,7 +922,6 @@ std::string Server::_build_error_response(int code, const ServerConfig& server, 
                        .setBody(content)
                        .setContentType(MimeTypes::getType(file_path))
                        .setConnection(conn_header);
-                append_cors_headers(builder);
                 return builder.build();
             }
         }
@@ -951,7 +932,6 @@ std::string Server::_build_error_response(int code, const ServerConfig& server, 
            .setBody(HttpResponseBuilder::buildErrorBody(code, ""))
            .setContentType("text/html")
            .setConnection(conn_header);
-    append_cors_headers(builder);
     return builder.build();
 }
 
@@ -1026,7 +1006,7 @@ void Server::_finalize_cgi_response(int client_fd, int status, pid_t res) {
     }
 
     CgiHandler cgi_handler;
-    CgiParsedOutput cgi_output = cgi_handler.parse_cgi_output(conn.cgi_response_raw, CgiResult::SUCCESS);
+    CgiParsedOutput cgi_output = cgi_handler.parse_cgi_output(conn.cgi_response_raw, CGI_EXEC_SUCCESS);
     
     std::vector< std::pair<std::string, std::string> > response_headers;
     std::string content_type = "";
@@ -1057,7 +1037,6 @@ void Server::_finalize_cgi_response(int client_fd, int status, pid_t res) {
         builder.setHeader(response_headers[i].first, response_headers[i].second);
     }
 
-    append_cors_headers(builder);
     conn.write_buffer = builder.build();
     _set_pollout(client_fd, true);
     _prepare_for_next_request(client_fd);

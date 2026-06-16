@@ -6,7 +6,6 @@
 #include <map>
 #include <HttpRequest.hpp>
 #include <CgiExecutor.hpp>
-#include <CgiResult.hpp>
 #include <ServerConfig.hpp>
 
 struct CgiParsedOutput {
@@ -17,14 +16,19 @@ struct CgiParsedOutput {
     CgiParsedOutput() : status_code(200), body(), headers() {}
 };
 
+enum CgiExecutionStatus {
+    CGI_EXEC_SUCCESS,
+    CGI_EXEC_TIMEOUT,
+    CGI_EXEC_ERROR
+};
+
 class CgiHandler {
     public:
         CgiHandler();
         ~CgiHandler();
 
-        bool is_cgi_request(const HttpRequest& req, const ServerConfig& server_config) const;
         int start_cgi(const HttpRequest& req, const ServerConfig& server_config, CgiProcessInfo& out_info, int client_fd = -1) const;
-        CgiParsedOutput parse_cgi_output(const std::string& raw_output, CgiResult::Status execution_status) const;
+        CgiParsedOutput parse_cgi_output(const std::string& raw_output, CgiExecutionStatus execution_status = CGI_EXEC_SUCCESS) const;
 
     private:
         const CgiExecutor _executor;

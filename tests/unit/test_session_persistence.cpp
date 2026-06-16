@@ -3,6 +3,7 @@
 /* ************************************************************************** */
 
 #include "minitest.hpp"
+#include <CgiHandler.hpp>
 #include <CgiExecutor.hpp>
 #include <HttpRequest.hpp>
 #include <LocationConfig.hpp>
@@ -14,7 +15,11 @@
 #include <cstdlib>
 #include <sys/wait.h>
 #include <errno.h>
-#include <CgiResult.hpp>
+
+struct CgiResult {
+    CgiExecutionStatus status;
+    std::string output;
+};
 
 namespace {
     bool pythonAvailable() {
@@ -46,9 +51,9 @@ namespace {
         waitpid(info.pid, &status, 0);
         close(info.stdout_fd);
         if (!stdin_closed) close(info.stdin_fd);
-        CgiResult::Status res_status = CgiResult::SUCCESS;
-        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) res_status = CgiResult::EXECUTION_ERROR;
-        return CgiResult(res_status, output);
+        CgiExecutionStatus res_status = CGI_EXEC_SUCCESS;
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) res_status = CGI_EXEC_ERROR;
+        { CgiResult r; r.status = res_status; r.output = output; return r; }
     }
 }
 
@@ -65,8 +70,8 @@ TEST(SessionPersistence, CookieFlow) {
     
     HttpRequest req;
     req.setMethod("GET")
-       .setUriPath("/www/cgi/session.py")
-       .setVersion("HTTP/1.1");
+       .setUri("/www/cgi/session.py").setPath("/www/cgi/session.py")
+       .setHttpVersion("1.1");
 
     LocationConfig config;
     // We assume we are running from the tests/ directory, so project root is ../
@@ -111,8 +116,8 @@ TEST(SessionPersistence, CookieFlow) {
     // --- SECOND VISIT (With received cookie) ---
     HttpRequest req2;
     req2.setMethod("GET")
-        .setUriPath("/www/cgi/session.py")
-        .setVersion("HTTP/1.1")
+        .setUri("/www/cgi/session.py").setPath("/www/cgi/session.py")
+        .setHttpVersion("1.1")
         .addHeader("Cookie", "session_id=" + sessionId);
 
     CgiResult result2 = sync_execute(executor, req2, config, srv);
@@ -125,8 +130,8 @@ TEST(SessionPersistence, CookieFlow) {
     // --- THIRD VISIT (Invalid/Unknown Cookie) ---
     HttpRequest req3;
     req3.setMethod("GET")
-        .setUriPath("/www/cgi/session.py")
-        .setVersion("HTTP/1.1")
+        .setUri("/www/cgi/session.py").setPath("/www/cgi/session.py")
+        .setHttpVersion("1.1")
         .addHeader("Cookie", "session_id=nonexistent_session_999");
 
     CgiResult result3 = sync_execute(executor, req3, config, srv);
@@ -156,7 +161,7 @@ TEST(SessionPersistence, MultipleCookies) {
 
     // First visit to get an ID
     HttpRequest req1;
-    req1.setMethod("GET").setUriPath("/www/cgi/session.py").setVersion("HTTP/1.1");
+    req1.setMethod("GET").setUri("/www/cgi/session.py").setPath("/www/cgi/session.py").setHttpVersion("1.1");
     CgiResult res1 = sync_execute(executor, req1, config, srv);
     
     std::string sidMarker = "session_id=";
@@ -167,8 +172,8 @@ TEST(SessionPersistence, MultipleCookies) {
     // Second visit with multiple cookies
     HttpRequest req2;
     req2.setMethod("GET")
-        .setUriPath("/www/cgi/session.py")
-        .setVersion("HTTP/1.1")
+        .setUri("/www/cgi/session.py").setPath("/www/cgi/session.py")
+        .setHttpVersion("1.1")
         .addHeader("Cookie", "theme=dark; session_id=" + sessionId + "; lang=en-US");
 
     CgiResult res2 = sync_execute(executor, req2, config, srv);
@@ -202,8 +207,8 @@ TEST(SessionPersistence, CorruptedSessionFile) {
 
     HttpRequest req;
     req.setMethod("GET")
-       .setUriPath("/www/cgi/session.py")
-       .setVersion("HTTP/1.1")
+       .setUri("/www/cgi/session.py").setPath("/www/cgi/session.py")
+       .setHttpVersion("1.1")
        .addHeader("Cookie", "session_id=" + corruptedId);
 
     CgiResult res = sync_execute(executor, req, config, srv);

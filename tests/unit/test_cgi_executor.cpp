@@ -11,13 +11,20 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
-#include <CgiResult.hpp>
-
+#include <CgiHandler.hpp>
 #include <CgiExecutor.hpp>
 #include <CgiEnvBuilder.hpp>
 #include <CgiException.hpp>
 #include <HttpRequest.hpp>
 #include <LocationConfig.hpp>
+#include <ServerConfig.hpp>
+#include <Enums.hpp>
+#include <StringUtils.hpp>
+
+struct CgiResult {
+    CgiExecutionStatus status;
+    std::string output;
+};
 #include <ServerConfig.hpp>
 #include <Enums.hpp>
 #include <StringUtils.hpp>
@@ -86,12 +93,12 @@ namespace {
 		close(info.stdout_fd);
 		if (!stdin_closed) close(info.stdin_fd);
 
-		CgiResult::Status res_status = CgiResult::SUCCESS;
+		CgiExecutionStatus res_status = CGI_EXEC_SUCCESS;
 		if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-			res_status = CgiResult::EXECUTION_ERROR;
+			res_status = CGI_EXEC_ERROR;
 		}
 
-		return CgiResult(res_status, output);
+		{ CgiResult r; r.status = res_status; r.output = output; return r; }
 	}
 }
 
@@ -117,7 +124,7 @@ TEST(CgiExecutor, GetRequestNoStdinPassed)
 	}
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_get_stdin.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_get_stdin.py").setPath("/test_get_stdin.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -150,9 +157,9 @@ TEST(CgiExecutor, PostBodyPassedViaStdin)
 
 	std::string post_body = "key1=value1&key2=value2";
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_post_stdin.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_post_stdin.py").setPath("/test_post_stdin.py")
+	   .setHttpVersion("1.1")
 	   .setBody(post_body);
 
 	LocationConfig config;
@@ -186,7 +193,7 @@ TEST(CgiExecutor, RequestMethodEnvVarGet)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_req_method_get.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_req_method_get.py").setPath("/test_req_method_get.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -218,9 +225,9 @@ TEST(CgiExecutor, RequestMethodEnvVarPost)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_req_method_post.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_req_method_post.py").setPath("/test_req_method_post.py")
+	   .setHttpVersion("1.1")
 	   .setBody("data");
 
 	LocationConfig config;
@@ -255,9 +262,9 @@ TEST(CgiExecutor, ContentLengthEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_content_len.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_content_len.py").setPath("/test_content_len.py")
+	   .setHttpVersion("1.1")
 	   .setBody(post_body);
 
 	LocationConfig config;
@@ -288,7 +295,7 @@ TEST(CgiExecutor, ScriptOutputCaptured)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_output.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_output.py").setPath("/test_output.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -320,7 +327,7 @@ TEST(CgiExecutor, SuccessfulExit)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_exit_0.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_exit_0.py").setPath("/test_exit_0.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -349,7 +356,7 @@ TEST(CgiExecutor, ErrorExitCode)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_exit_1.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_exit_1.py").setPath("/test_exit_1.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -372,7 +379,7 @@ TEST(CgiExecutor, MissingHandlerThrows)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_unknown.unknown").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_unknown.unknown").setPath("/test_unknown.unknown").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -391,7 +398,7 @@ TEST(CgiExecutor, MissingHandlerThrows)
 TEST(CgiExecutor, ScriptNotFoundThrows)
 {
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/nonexistent.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/nonexistent.py").setPath("/nonexistent.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -423,7 +430,7 @@ TEST(CgiExecutor, QueryStringEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_query.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_query.py").setPath("/test_query.py").setHttpVersion("1.1");
 	req.addQueryParameter("search", "test");
 	req.addQueryParameter("page", "5");
 
@@ -459,7 +466,7 @@ TEST(CgiExecutor, GatewayInterfaceSet)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_gateway.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_gateway.py").setPath("/test_gateway.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -491,9 +498,9 @@ TEST(CgiExecutor, ServerProtocolEnv)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/test_protocol.py")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("GET")
+	   .setUri("/test_protocol.py").setPath("/test_protocol.py")
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -526,9 +533,9 @@ TEST(CgiExecutor, LargePostBody)
 
 	std::string large_body(50000, 'x'); // 50KB
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_large_body.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_large_body.py").setPath("/test_large_body.py")
+	   .setHttpVersion("1.1")
 	   .setBody(large_body);
 
 	LocationConfig config;
@@ -561,9 +568,9 @@ TEST(CgiExecutor, EmptyPostBody)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_empty_post.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_empty_post.py").setPath("/test_empty_post.py")
+	   .setHttpVersion("1.1")
 	   .setBody("");
 
 	LocationConfig config;
@@ -597,7 +604,7 @@ TEST(CgiExecutor, OutputWithNewlines)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_multiline.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_multiline.py").setPath("/test_multiline.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -628,7 +635,7 @@ TEST(CgiExecutor, SequentialExecutions)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_sequential.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_sequential.py").setPath("/test_sequential.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -667,11 +674,11 @@ TEST(CgiExecutor, DifferentScripts)
 	CgiExecutor executor;
 
 	HttpRequest req1;
-	req1.setMethod(GET).setUriPath("/test_script1.py").setVersion("HTTP/1.1");
+	req1.setMethod("GET").setUri("/test_script1.py").setPath("/test_script1.py").setHttpVersion("1.1");
 	CgiResult result1 = sync_execute(executor, req1, config, srv);
 
 	HttpRequest req2;
-	req2.setMethod(GET).setUriPath("/test_script2.py").setVersion("HTTP/1.1");
+	req2.setMethod("GET").setUri("/test_script2.py").setPath("/test_script2.py").setHttpVersion("1.1");
 	CgiResult result2 = sync_execute(executor, req2, config, srv);
 
 	ASSERT_TRUE(result1.output.find("Script1") != std::string::npos);
@@ -694,7 +701,7 @@ TEST(CgiExecutor, ExitCodeInException)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_exit_42.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_exit_42.py").setPath("/test_exit_42.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -726,9 +733,9 @@ TEST(CgiExecutor, ContentTypeForwarded)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_content_type.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_content_type.py").setPath("/test_content_type.py")
+	   .setHttpVersion("1.1")
 	   .setBody("json")
 	   .addHeader("content-type", "application/json");
 
@@ -768,7 +775,7 @@ TEST(CgiExecutor, VerifyRequestMethodReallySet)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_verify_method.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_verify_method.py").setPath("/test_verify_method.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -809,9 +816,9 @@ TEST(CgiExecutor, VerifyContentLengthReallySet)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/test_verify_clen.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("POST")
+	   .setUri("/test_verify_clen.py").setPath("/test_verify_clen.py")
+	   .setHttpVersion("1.1")
 	   .setBody(post_body);
 
 	LocationConfig config;
@@ -846,9 +853,9 @@ TEST(CgiExecutor, ScriptNameEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/script_name_test.py")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("GET")
+	   .setUri("/script_name_test.py").setPath("/script_name_test.py")
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -881,9 +888,9 @@ TEST(CgiExecutor, PathInfoEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/pathinfo_test.py")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("GET")
+	   .setUri("/pathinfo_test.py").setPath("/pathinfo_test.py")
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -915,9 +922,9 @@ TEST(CgiExecutor, HttpHeaderForwarding)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/test_http_headers.py")
-	   .setVersion("HTTP/1.1")
+	req.setMethod("GET")
+	   .setUri("/test_http_headers.py").setPath("/test_http_headers.py")
+	   .setHttpVersion("1.1")
 	   .addHeader("host", "example.com");
 
 	LocationConfig config;
@@ -946,11 +953,11 @@ TEST(CgiExecutor, PathResolutionIgnoresQueryString)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET)
+	req.setMethod("GET")
 	   .setUri("/query_path_test.py?name=value")
 	   .setPath("/query_path_test.py")
 	   .setQueryString("name=value")
-	   .setVersion("HTTP/1.1");
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -968,9 +975,9 @@ TEST(CgiExecutor, PathResolutionIgnoresQueryString)
 TEST(CgiExecutor, MissingExtensionThrowsCgiException)
 {
 	HttpRequest req;
-	req.setMethod(GET)
-	   .setUriPath("/script_without_extension")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("GET")
+	   .setUri("/script_without_extension").setPath("/script_without_extension")
+	   .setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -996,7 +1003,7 @@ TEST(CgiExecutor, ExecveFailureReturns500)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/execve_fail_test.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/execve_fail_test.py").setPath("/execve_fail_test.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -1042,7 +1049,7 @@ TEST(CgiExecutor, PHPCgiExecution)
 	fclose(fp);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/test_php_cgi.php").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/test_php_cgi.php").setPath("/test_php_cgi.php").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -1074,9 +1081,9 @@ TEST(CgiExecutor, ChunkedBodyDecodingBeforeCgi)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(POST)
-	   .setUriPath("/chunked_test.py")
-	   .setVersion("HTTP/1.1");
+	req.setMethod("POST")
+	   .setUri("/chunked_test.py").setPath("/chunked_test.py")
+	   .setHttpVersion("1.1");
 
 	// "5\r\nHello\r\n6\r\nWorld!\r\n0\r\n\r\n" should decode to "HelloWorld!"
 	std::string chunked_body = "5\r\nHello\r\n6\r\nWorld!\r\n0\r\n\r\n";
@@ -1124,7 +1131,7 @@ TEST(CgiExecutor, ServerNameEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/servername_test.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/servername_test.py").setPath("/servername_test.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -1156,7 +1163,7 @@ TEST(CgiExecutor, ServerPortEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/serverport_test.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/serverport_test.py").setPath("/serverport_test.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
@@ -1188,7 +1195,7 @@ TEST(CgiExecutor, RemoteAddrEnvVar)
 	if (script.empty()) ASSERT_TRUE(false);
 
 	HttpRequest req;
-	req.setMethod(GET).setUriPath("/remoteaddr_test.py").setVersion("HTTP/1.1");
+	req.setMethod("GET").setUri("/remoteaddr_test.py").setPath("/remoteaddr_test.py").setHttpVersion("1.1");
 
 	LocationConfig config;
 	config.root = "/tmp";
