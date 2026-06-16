@@ -415,7 +415,6 @@ Config ConfigParser::parse() {
         advance();
     }
 
-    //
     for (std::map<std::string, std::vector<ServerConfig*> >::iterator it = port_to_servers.begin();
          it != port_to_servers.end(); ++it) {
         if (it->second.size() > 1) {
